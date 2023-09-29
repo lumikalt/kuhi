@@ -1,0 +1,13 @@
+[package]
+name = "kuhi"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.75"
+codespan-reporting = "0.11.1"
+gmp-mpfr-sys = "1.6.1"
+lazy_static = "1.4.0"
+rug = "1.22.0"
+rustyline = "12.0.0"
+thiserror = "1.0.49"
