@@ -1,7 +1,7 @@
 use crate::{
-    builtins,
-    err::{Loc, RuntimeError},
-    parser::Token,
+    builtins::BUILTINS,
+    err::RuntimeError,
+    parser::{Loc, Token},
     value::Value,
 };
 
@@ -21,21 +21,80 @@ impl<'a> Env<'a> {
         }
     }
 
+    pub fn repurpose(&mut self, tokens: &'a Vec<(Token, Loc)>) -> &mut Self {
+        self.tokens = tokens;
+
+        self
+    }
+
     pub fn run(&mut self) -> Result<(), (RuntimeError, Loc)> {
         for (token, loc) in self.tokens.iter().rev() {
             let stack = &mut self.stack;
             match token {
-                Token::Number(n) => stack.push(Value::Number(n.clone())),
+                Token::Integer(n) => stack.push(Value::Integer(n.clone())),
                 Token::Rational(r) => stack.push(Value::Rational(r.clone())),
+                Token::Complex(c) => stack.push(Value::Complex(c.clone())),
+
                 Token::Function(_f) => {
                     todo!("Implement function application")
                 }
-                Token::Plus => match builtins::BUILTINS.get(&'+').unwrap().call(stack.clone()) {
-                    Err(err) => return Err((err, loc.clone())),
-                    Ok(stack) => {
-                        self.stack = stack;
+                Token::Add => {
+                    match unsafe { BUILTINS.get(&'+').unwrap_unchecked() }.call(stack.clone()) {
+                        Err(err) => return Err((err, loc.clone())),
+                        Ok(stack) => {
+                            self.stack = stack;
+                        }
                     }
-                },
+                }
+                Token::Subtract => {
+                    match unsafe { BUILTINS.get(&'-').unwrap_unchecked() }.call(stack.clone()) {
+                        Err(err) => return Err((err, loc.clone())),
+                        Ok(stack) => {
+                            self.stack = stack;
+                        }
+                    }
+                }
+                Token::Multiply => {
+                    match unsafe { BUILTINS.get(&'×').unwrap_unchecked() }.call(stack.clone()) {
+                        Err(err) => return Err((err, loc.clone())),
+                        Ok(stack) => {
+                            self.stack = stack;
+                        }
+                    }
+                }
+                Token::Divide => {
+                    match unsafe { BUILTINS.get(&'÷').unwrap_unchecked() }.call(stack.clone()) {
+                        Err(err) => return Err((err, loc.clone())),
+                        Ok(stack) => {
+                            self.stack = stack;
+                        }
+                    }
+                }
+                Token::Power => {
+                    match unsafe { BUILTINS.get(&'ⁿ').unwrap_unchecked() }.call(stack.clone()) {
+                        Err(err) => return Err((err, loc.clone())),
+                        Ok(stack) => {
+                            self.stack = stack;
+                        }
+                    }
+                }
+                Token::Factorial => {
+                    match unsafe { BUILTINS.get(&'!').unwrap_unchecked() }.call(stack.clone()) {
+                        Err(err) => return Err((err, loc.clone())),
+                        Ok(stack) => {
+                            self.stack = stack;
+                        }
+                    }
+                }
+                Token::Modulo => {
+                    match unsafe { BUILTINS.get(&'◿').unwrap_unchecked() }.call(stack.clone()) {
+                        Err(err) => return Err((err, loc.clone())),
+                        Ok(stack) => {
+                            self.stack = stack;
+                        }
+                    }
+                }
+
                 _ => todo!("Implement other tokens"),
             }
         }

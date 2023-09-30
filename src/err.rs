@@ -2,29 +2,18 @@ use std::fmt::{self, Display, Formatter};
 
 use thiserror::Error;
 
-/// Location of a token in the source code
-///
-/// `offset`: number of characters from the beginning of the file \
-/// `line`: number of lines from the beginning of the file \
-/// `column`: number of characters from the beginning of the line
-#[derive(Debug, Clone)]
-pub struct Loc {
-    pub offset: usize,
-    pub line: usize,
-    pub column: usize,
-}
-
 #[derive(Error, Debug)]
 pub enum SyntaxError {
     InvalidSymbol(char),
-    UnmatchedParenthesis,
+    /// true if `(`, false if `)`
+    UnmatchedParenthesis(bool),
 }
 
 impl Display for SyntaxError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             SyntaxError::InvalidSymbol(_) => write!(f, "invalid symbol"),
-            SyntaxError::UnmatchedParenthesis => write!(f, "unmatched parenthesis"),
+            SyntaxError::UnmatchedParenthesis(_) => write!(f, "unmatched parenthesis"),
         }
     }
 }
@@ -32,19 +21,23 @@ impl Display for SyntaxError {
 impl SyntaxError {
     pub fn note(&self) -> String {
         match self {
-            SyntaxError::InvalidSymbol(_) => "check the docs for the list of valid symbols",
-            SyntaxError::UnmatchedParenthesis => "there is a missing parenthesis in the code",
+            SyntaxError::InvalidSymbol(_) => "check the docs for a list of valid symbols".to_owned(),
+            SyntaxError::UnmatchedParenthesis(open) => format!(
+                "there is a missing {} parenthesis in the code",
+                if *open { "opening" } else { "closing" }
+            ),
         }
-        .to_owned()
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum RuntimeError {
     InvalidPop { len: usize, arity: usize },
 
     InvalidFoldWith(usize),
     InvalidMapWith(usize),
     InvalidFilterWith(usize),
+    TypeMissmatch { expected: String, got: String }
 }
 
 impl Display for RuntimeError {
@@ -64,6 +57,9 @@ impl Display for RuntimeError {
             RuntimeError::InvalidFilterWith(arity) => {
                 write!(f, "attempt to filter using a function 0f arity {}", arity)
             }
+            RuntimeError::TypeMissmatch { expected, got } => {
+                write!(f, "expected type `{expected}`, got `{got}`")
+            }
         }
     }
 }
@@ -77,6 +73,9 @@ impl RuntimeError {
             RuntimeError::InvalidFoldWith(_) => "can only fold using binary operations",
             RuntimeError::InvalidMapWith(_) => "can only map using unary operations",
             RuntimeError::InvalidFilterWith(_) => "can only filter using unary operations",
+            RuntimeError::TypeMissmatch { expected: _, got: _ } => {
+                "ensure the function you're using works for the type of values on the stack"
+            }
         }
         .to_string()
     }

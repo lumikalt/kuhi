@@ -1,0 +1,1 @@
+- Fix non closed ( still being a successeful function parse

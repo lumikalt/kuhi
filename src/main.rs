@@ -14,22 +14,23 @@ fn main() -> anyhow::Result<()> {
     let config = codespan_reporting::term::Config::default();
     let _editor = DefaultEditor::new();
 
-    let input =
-        "+ 1.2 2 1";
+    let input = format!("1i2 .`");
     let input = dbg!(input);
 
-    let tokens = match parse(input) {
+    let tokens = match parse(&input) {
         Ok(tokens) => {
-            dbg!(tokens)
+            // dbg!(tokens)
+            tokens
         }
         Err(err) => {
             let file = SimpleFile::new("<repl>", input);
-            let start = err.1.offset;
+            let start = err.1.start;
+            let end = err.1.end + 1;
 
             let diagnostic = Diagnostic::error()
                 .with_message("Syntax error")
                 .with_labels(vec![
-                    Label::primary((), start..start).with_message(err.0.to_string())
+                    Label::primary((), start..end).with_message(err.0.to_string())
                 ])
                 .with_notes(vec![err.0.note()]);
 
@@ -41,15 +42,16 @@ fn main() -> anyhow::Result<()> {
 
     let mut env = Env::new(&tokens);
     match env.run() {
-        Ok(_) => println!(">> {:?}", env.stack),
+        Ok(_) => println!(">> {:?}", env.stack.iter().rev().collect::<Vec<_>>()),
         Err(err) => {
             let file = SimpleFile::new("<repl>", input);
-            let start = err.1.offset;
+            let start = err.1.start;
+            let end = err.1.end + 1;
 
             let diagnostic = Diagnostic::error()
                 .with_message("Runtime error")
                 .with_labels(vec![
-                    Label::primary((), start..start).with_message(err.0.to_string())
+                    Label::primary((), start..end).with_message(err.0.to_string())
                 ])
                 .with_notes(vec![err.0.note()]);
 

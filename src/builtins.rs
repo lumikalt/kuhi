@@ -11,7 +11,10 @@ pub type Func = fn(Stack) -> RuntimeResult;
 lazy_static! {
     pub static ref BUILTINS: HashMap<char, Builtin> = HashMap::from([
         ('.', Builtin::new(dup, pop, 1)),
-        ('+', Builtin::new(add, sub, 2))
+        ('+', Builtin::new(add, sub, 2)),
+        ('-', Builtin::new(sub, add, 2)),
+        ('×', Builtin::new(mul, div, 2)),
+        ('÷', Builtin::new(div, mul, 2)),
     ]);
 }
 
@@ -53,28 +56,50 @@ impl Builtin {
 }
 
 fn dup(stack: Stack) -> RuntimeResult {
-    todo!()
+    let ([x], mut stack) = __pop_n(stack);
+
+    stack.push(x.clone());
+    stack.push(x);
+    Ok(stack)
 }
 
 fn pop(stack: Stack) -> RuntimeResult {
-    todo!()
+    let ([_], stack) = __pop_n(stack);
+
+    Ok(stack)
 }
 
 fn add(stack: Stack) -> RuntimeResult {
-    let mut stack = stack.clone();
-    let ([x, y], mut stack) = __pop_n(stack.to_vec());
+    let ([y, x], mut stack) = __pop_n(stack);
 
     stack.push(x + y);
     Ok(stack)
 }
 
 fn sub(stack: Stack) -> RuntimeResult {
-    todo!()
+    let ([y, x], mut stack) = __pop_n(stack);
+
+    stack.push(x + -y);
+    Ok(stack)
 }
 
+fn mul(stack: Stack) -> RuntimeResult {
+    let ([y, x], mut stack) = __pop_n(stack);
+
+    stack.push(x * y);
+    Ok(stack)
+}
+
+fn div(stack: Stack) -> RuntimeResult {
+    let ([y, x], mut stack) = __pop_n(stack);
+
+    stack.push(x * y.reciprocal());
+    Ok(stack)
+}
+
+/// As the program is ran from right to left, the resulting array will be in reverse.
 fn __pop_n<const N: usize>(stack: Vec<Value>) -> ([Value; N], Stack) {
     let mut stack = stack.clone();
-    let mut values = [(); N].map(|_| unsafe { stack.pop().unwrap_unchecked() });
-    values.reverse();
+    let values = [(); N].map(|_| unsafe { stack.pop().unwrap_unchecked() });
     (values, stack)
 }
