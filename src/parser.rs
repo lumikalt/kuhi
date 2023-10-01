@@ -151,11 +151,13 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
             }
             'i' => {
                 // Get imaginary part
-                let c = chars.next().unwrap_or('1');
-                loc.end += 1;
-                loc.column += 1;
+                let mut number = Integer::from(1);
+                if let Some('0'..='9') = chars.peek() {
+                    number = Integer::from(chars.next().unwrap().to_digit(10).unwrap());
 
-                let mut number = Integer::from(c.to_digit(10).unwrap());
+                    loc.end += 1;
+                    loc.column += 1;
+                }
                 while let Some('0'..='9') = chars.peek() {
                     number *= 10;
                     number += Integer::from(chars.next().unwrap().to_digit(10).unwrap());
@@ -196,32 +198,22 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                     loc.start = prev.1.start;
                     tokens.pop();
                     match imaginary {
-                        Token::Integer(im) => {
-                            Token::Complex(Complex::with_val(128, (re, im)))
-                        }
-                        Token::Rational(im) => {
-                            Token::Complex(Complex::with_val(128, (re, im)))
-                        }
+                        Token::Integer(im) => Token::Complex(Complex::with_val(128, (re, im))),
+                        Token::Rational(im) => Token::Complex(Complex::with_val(128, (re, im))),
                         _ => todo!("Proper error message"),
                     }
                 } else {
                     if let Token::Rational(re) = &prev.0 {
                         tokens.pop();
                         match imaginary {
-                            Token::Integer(im) => {
-                                Token::Complex(Complex::with_val(128, (re, im)))
-                            }
-                            Token::Rational(im) => {
-                                Token::Complex(Complex::with_val(128, (re, im)))
-                            }
+                            Token::Integer(im) => Token::Complex(Complex::with_val(128, (re, im))),
+                            Token::Rational(im) => Token::Complex(Complex::with_val(128, (re, im))),
                             _ => todo!("Proper error message"),
                         }
                     } else {
                         match imaginary {
                             Token::Integer(im) => Token::Complex(Complex::with_val(128, (0, im))),
-                            Token::Rational(im) => {
-                                Token::Complex(Complex::with_val(128, (0, im)))
-                            }
+                            Token::Rational(im) => Token::Complex(Complex::with_val(128, (0, im))),
                             _ => todo!("Proper error message"),
                         }
                     }

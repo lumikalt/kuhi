@@ -1,4 +1,4 @@
-use std::ops::*;
+use std::{ops::*, fmt::Display};
 
 use rug::{Complex, Integer, Rational};
 
@@ -44,6 +44,29 @@ impl Value {
                 expected: "Numeric".to_string(),
                 got: format!("{}", invalid.type_id()),
             }),
+        }
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Value::*;
+
+        match self {
+            Integer(n) => write!(f, "{}", n),
+            Rational(r) => write!(f, "{}", r),
+            Complex(c) => write!(f, "{}+{}i", c.real().to_f64(), c.imag().to_f64()),
+            Symbol(s) => write!(f, "{}", s),
+            List(l) => {
+                write!(f, "(")?;
+                for v in l {
+                    write!(f, "{} ", v)?;
+                }
+                write!(f, ")")
+            }
+            Function(_) => write!(f, "<function>"),
+
+            InvalidState(err) => write!(f, "{}", err),
         }
     }
 }

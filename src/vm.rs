@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{
     builtins::BUILTINS,
     err::RuntimeError,
@@ -100,5 +102,21 @@ impl<'a> Env<'a> {
         }
 
         Ok(())
+    }
+}
+
+impl Display for Env<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let stack = self.stack.clone();
+
+        let stack = stack
+            .into_iter()
+            .rev()
+            .enumerate()
+            .fold("".to_string(), |acc, v| {
+                acc + &format!("[{}] {} \n", v.0 + 1, v.1)
+            });
+
+        write!(f, "{}", stack.trim())
     }
 }

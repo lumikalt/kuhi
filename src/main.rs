@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
     let config = codespan_reporting::term::Config::default();
     let _editor = DefaultEditor::new();
 
-    let input = format!("1i2 .`");
+    let input = format!("())");
     let input = dbg!(input);
 
     let tokens = match parse(&input) {
@@ -42,7 +42,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut env = Env::new(&tokens);
     match env.run() {
-        Ok(_) => println!(">> {:?}", env.stack.iter().rev().collect::<Vec<_>>()),
+        Ok(_) => println!("{env}"),
         Err(err) => {
             let file = SimpleFile::new("<repl>", input);
             let start = err.1.start;
