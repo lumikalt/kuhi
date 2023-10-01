@@ -33,6 +33,7 @@ impl<'a> Env<'a> {
         for (token, loc) in self.tokens.iter().rev() {
             let stack = &mut self.stack;
             match token {
+                Token::Spacing => continue,
                 Token::Integer(n) => stack.push(Value::Integer(n.clone())),
                 Token::Rational(r) => stack.push(Value::Rational(r.clone())),
                 Token::Complex(c) => stack.push(Value::Complex(c.clone())),

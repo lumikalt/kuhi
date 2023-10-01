@@ -35,6 +35,7 @@ pub enum Token {
     Factorial,
     Modulo,
 
+    Spacing, // Otherwise Complex parsing consumes the previous token even when seperated by a space
     InvalidState,
 }
 
@@ -55,6 +56,7 @@ impl Clone for Token {
             Factorial => Factorial,
             Modulo => Modulo,
 
+            Spacing => Spacing,
             InvalidState => InvalidState,
         }
     }
@@ -84,6 +86,7 @@ impl Display for Token {
             Factorial => write!(f, "!"),
             Modulo => write!(f, "◿"),
 
+            Spacing => write!(f, ""),
             InvalidState => write!(f, "<InvalidState>"),
         }
     }
@@ -106,15 +109,16 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                 loc.start += 1;
                 loc.end += 1;
                 loc.column += 1;
-                continue;
+
+                Token::Spacing
             }
             '\n' => {
+                loc.start += 1;
+                loc.end += 1;
                 loc.line += 1;
                 loc.column = 1;
 
-                loc.start += 1;
-                loc.end += 1;
-                continue;
+                Token::Spacing
             }
 
             '0'..='9' => {
