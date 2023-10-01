@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
     let config = codespan_reporting::term::Config::default();
     let _editor = DefaultEditor::new();
 
-    let input = format!("())");
+    let input = format!("i0.2 i.2");
     let input = dbg!(input);
 
     let tokens = match parse(&input) {
