@@ -1,1 +1,1 @@
-- Fix non closed ( still being a successeful function parse
+- Fix complex parsing breaking error reporting's Loc

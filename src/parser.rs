@@ -121,7 +121,7 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                 Token::Spacing
             }
 
-            '0'..='9' => {
+            '0'..='9' => (|| {
                 let mut number = Integer::from(c.to_digit(10).unwrap());
                 while let Some('0'..='9') = chars.peek() {
                     number *= 10;
@@ -134,9 +134,24 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                     loc.end += 1;
                     loc.column += 1;
 
-                    chars.next();
                     let mut denominator = Integer::from(1);
                     let mut decimal = Integer::from(0);
+                    // peek two characters forward
+                    if let Some('0'..='9') = chars.clone().nth(1) {
+                        chars.next();
+                        decimal *= 10;
+                        decimal += Integer::from(chars.next().unwrap().to_digit(10).unwrap());
+                        denominator *= 10;
+
+                        loc.end += 1;
+                        loc.column += 1;
+                    } else {
+                        // Undo changes
+                        loc.end -= 1;
+                        loc.column -= 1;
+
+                        return Token::Integer(number);
+                    }
                     while let Some('0'..='9') = chars.peek() {
                         decimal *= 10;
                         decimal += Integer::from(chars.next().unwrap().to_digit(10).unwrap());
@@ -152,8 +167,20 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                 } else {
                     Token::Integer(number)
                 }
-            }
-            'i' => {
+            })(),
+            'i' => (|| {
+                // Consume previous token (if any) when it's a Real type
+                // to get the real part
+                let prev = tokens.clone();
+                let otherwise = (Token::InvalidState.clone(), loc.clone());
+                let prev = &prev.last().unwrap_or(&otherwise);
+
+                let real = match &prev.0 {
+                    Token::Integer(n) => Rational::from((n, 1)),
+                    Token::Rational(r) => r.clone(),
+                    Token::Spacing | Token::InvalidState | _ => Rational::from((0, 1)),
+                };
+
                 // Get imaginary part
                 let mut number = Integer::from(1);
                 if let Some('0'..='9') = chars.peek() {
@@ -173,9 +200,24 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                     loc.end += 1;
                     loc.column += 1;
 
-                    chars.next();
                     let mut denominator = Integer::from(1);
                     let mut decimal = Integer::from(0);
+                    // peek two characters forward
+                    if let Some('0'..='9') = chars.clone().nth(1) {
+                        chars.next();
+                        decimal *= 10;
+                        decimal += Integer::from(chars.next().unwrap().to_digit(10).unwrap());
+                        denominator *= 10;
+
+                        loc.end += 1;
+                        loc.column += 1;
+                    } else {
+                        // Undo changes
+                        loc.end -= 1;
+                        loc.column -= 1;
+
+                        return Token::Integer(number);
+                    }
                     while let Some('0'..='9') = chars.peek() {
                         decimal *= 10;
                         decimal += Integer::from(chars.next().unwrap().to_digit(10).unwrap());
@@ -184,46 +226,16 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                         loc.end += 1;
                         loc.column += 1;
                     }
-                    Token::Rational(Rational::from((
+                    Rational::from((
                         number * denominator.clone() + decimal,
                         denominator,
-                    )))
+                    ))
                 } else {
-                    Token::Integer(number)
+                    Rational::from((number, 1))
                 };
 
-                // Consume previous token (if any) when it's a non-Complex Numeric type
-                // to get the real part
-                let prev = tokens.clone();
-                let otherwise = (Token::InvalidState.clone(), loc.clone());
-                let prev = &prev.last().unwrap_or(&otherwise);
-
-                if let Token::Integer(re) = &prev.0 {
-                    loc.start = prev.1.start;
-                    tokens.pop();
-                    match imaginary {
-                        Token::Integer(im) => Token::Complex(Complex::with_val(128, (re, im))),
-                        Token::Rational(im) => Token::Complex(Complex::with_val(128, (re, im))),
-                        _ => todo!("Proper error message"),
-                    }
-                } else {
-                    if let Token::Rational(re) = &prev.0 {
-                        tokens.pop();
-                        match imaginary {
-                            Token::Integer(im) => Token::Complex(Complex::with_val(128, (re, im))),
-                            Token::Rational(im) => Token::Complex(Complex::with_val(128, (re, im))),
-                            _ => todo!("Proper error message"),
-                        }
-                    } else {
-                        match imaginary {
-                            Token::Integer(im) => Token::Complex(Complex::with_val(128, (0, im))),
-                            Token::Rational(im) => Token::Complex(Complex::with_val(128, (0, im))),
-                            _ => todo!("Proper error message"),
-                        }
-                    }
-                }
-            }
-
+                Token::Complex(Complex::with_val(128, (real, imaginary)))
+            })(),
             '+' => Token::Add,
             '-' => Token::Subtract,
             '×' => Token::Multiply,
@@ -268,11 +280,7 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                 loc.clone(),
                 tokens.clone(),
             ))?,
-            _ => Err((
-                SyntaxError::InvalidSymbol(c),
-                dbg!(loc.clone()),
-                tokens.clone(),
-            ))?,
+            _ => Err((SyntaxError::InvalidSymbol(c), loc.clone(), tokens.clone()))?,
         };
 
         tokens.push((token, loc.clone()));
