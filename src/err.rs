@@ -1,5 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
+use rug::Integer;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -21,7 +22,9 @@ impl Display for SyntaxError {
 impl SyntaxError {
     pub fn note(&self) -> String {
         match self {
-            SyntaxError::InvalidSymbol(_) => "check the docs for a list of valid symbols".to_owned(),
+            SyntaxError::InvalidSymbol(_) => {
+                "check the docs for a list of valid symbols".to_owned()
+            }
             SyntaxError::UnmatchedParenthesis(open) => format!(
                 "there is a missing {} parenthesis in the code",
                 if *open { "opening" } else { "closing" }
@@ -37,7 +40,11 @@ pub enum RuntimeError {
     InvalidFoldWith(usize),
     InvalidMapWith(usize),
     InvalidFilterWith(usize),
-    TypeMissmatch { expected: String, got: String }
+
+    TypeMissmatch { expected: String, got: String },
+
+    ExponentTooBig(Integer),
+    ZerothRoot,
 }
 
 impl Display for RuntimeError {
@@ -60,6 +67,8 @@ impl Display for RuntimeError {
             RuntimeError::TypeMissmatch { expected, got } => {
                 write!(f, "expected type `{expected}`, got `{got}`")
             }
+            RuntimeError::ExponentTooBig(n) => write!(f, "exponent too big: {}", n),
+            RuntimeError::ZerothRoot => write!(f, "cannot take the 0th root"),
         }
     }
 }
@@ -68,15 +77,21 @@ impl RuntimeError {
     pub fn note(&self) -> String {
         match self {
             RuntimeError::InvalidPop { len: _, arity: _ } => {
-                "make sure you are using the correct function or add more values to the stack"
+                format!(
+                    "make sure you are using the correct function or add more values to the stack"
+                )
             }
-            RuntimeError::InvalidFoldWith(_) => "can only fold using binary operations",
-            RuntimeError::InvalidMapWith(_) => "can only map using unary operations",
-            RuntimeError::InvalidFilterWith(_) => "can only filter using unary operations",
-            RuntimeError::TypeMissmatch { expected: _, got: _ } => {
+            RuntimeError::InvalidFoldWith(_) => format!("can only fold using binary operations"),
+            RuntimeError::InvalidMapWith(_) => format!("can only map using unary operations"),
+            RuntimeError::InvalidFilterWith(_) => format!("can only filter using unary operations"),
+            RuntimeError::TypeMissmatch {
+                expected: _,
+                got: _,
+            } => format!(
                 "ensure the function you're using works for the type of values on the stack"
-            }
+            ),
+            RuntimeError::ExponentTooBig(_) => format!("max is {} (u32::MAX)", u32::MAX),
+            RuntimeError::ZerothRoot => format!("try filtering the 0s on the stack"),
         }
-        .to_string()
     }
 }

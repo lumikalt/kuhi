@@ -1,6 +1,6 @@
-use std::{ops::*, fmt::Display};
+use std::{fmt::Display, ops::*};
 
-use rug::{Complex, Integer, Rational};
+use rug::{ops::Pow, Complex, Integer, Rational};
 
 use crate::{
     builtins::{RuntimeResult, Stack},
@@ -44,6 +44,39 @@ impl Value {
                 expected: "Numeric".to_string(),
                 got: format!("{}", invalid.type_id()),
             }),
+        }
+    }
+
+    pub fn pow(&self, rhs: &Self) -> Self {
+        match (self, rhs) {
+            (Value::Integer(n), Value::Integer(m)) => {
+                if let Some(m) = m.to_u32() {
+                    Value::Integer(n.clone().pow(m))
+                } else {
+                    Value::InvalidState(RuntimeError::ExponentTooBig(m.clone()))
+                }
+            }
+            (Value::Rational(r), Value::Integer(n)) => {
+                if let Some(n) = n.to_u32() {
+                    Value::Rational(r.clone().pow(n))
+                } else {
+                    Value::InvalidState(RuntimeError::ExponentTooBig(n.clone()))
+                }
+            }
+            _ => {
+                todo!()
+            }
+        }
+    }
+
+    pub fn root(&self, rhs: &Self) -> Self {
+        match (self, rhs) {
+            (Value::Integer(n), Value::Integer(m)) => {
+                Value::Integer(n.clone().root(m.to_u32_wrapping()))
+            }
+            _ => {
+                todo!()
+            }
         }
     }
 }

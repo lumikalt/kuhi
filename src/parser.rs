@@ -95,7 +95,9 @@ impl Display for Token {
 pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(Token, Loc)>)> {
     let mut tokens: Vec<(Token, Loc)> = Vec::new();
     let mut chars = input.chars().peekable();
-    // Track current char
+    // Track token position por parsing errors.
+    // On the run step, this is used for runtime error reporting, even when
+    // the parse was successeful.
     let mut loc = Loc {
         start: 0,
         end: 0,
@@ -183,6 +185,9 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
 
                 // Get imaginary part
                 let mut number = Integer::from(1);
+                if let Some('.') = chars.peek() {
+                    return Token::Complex(Complex::with_val(128, (real, 1)));
+                }
                 if let Some('0'..='9') = chars.peek() {
                     number = Integer::from(chars.next().unwrap().to_digit(10).unwrap());
 
@@ -211,31 +216,31 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
 
                         loc.end += 1;
                         loc.column += 1;
+
+                        while let Some('0'..='9') = chars.peek() {
+                            decimal *= 10;
+                            decimal += Integer::from(chars.next().unwrap().to_digit(10).unwrap());
+                            denominator *= 10;
+
+                            loc.end += 1;
+                            loc.column += 1;
+                        }
                     } else {
                         // Undo changes
                         loc.end -= 1;
                         loc.column -= 1;
 
-                        return Token::Integer(number);
+                        decimal = number.clone();
+                        denominator = Integer::from(1);
                     }
-                    while let Some('0'..='9') = chars.peek() {
-                        decimal *= 10;
-                        decimal += Integer::from(chars.next().unwrap().to_digit(10).unwrap());
-                        denominator *= 10;
-
-                        loc.end += 1;
-                        loc.column += 1;
-                    }
-                    Rational::from((
-                        number * denominator.clone() + decimal,
-                        denominator,
-                    ))
+                    Rational::from((number * denominator.clone() + decimal, denominator))
                 } else {
                     Rational::from((number, 1))
                 };
 
                 Token::Complex(Complex::with_val(128, (real, imaginary)))
             })(),
+
             '+' => Token::Add,
             '-' => Token::Subtract,
             '×' => Token::Multiply,

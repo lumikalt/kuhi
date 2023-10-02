@@ -97,6 +97,21 @@ fn div(stack: Stack) -> RuntimeResult {
     Ok(stack)
 }
 
+/// ⁿ2 3 => 9
+fn pow(stack: Stack) -> RuntimeResult {
+    let ([y, x], mut stack) = __pop_n(stack);
+
+    stack.push(x.pow(&y));
+    Ok(stack)
+}
+
+fn root(stack: Stack) -> RuntimeResult {
+    let ([y, x], mut stack) = __pop_n(stack);
+
+    stack.push(x.pow(&-y));
+    Ok(stack)
+}
+
 /// As the program is ran from right to left, the resulting array will be in reverse.
 fn __pop_n<const N: usize>(stack: Vec<Value>) -> ([Value; N], Stack) {
     let mut stack = stack.clone();
