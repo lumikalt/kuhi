@@ -1,1 +1,3 @@
-- Fix complex parsing breaking error reporting's Loc
+- Special parsing rules for pi and e?
+- Parsing Infinity and Epsilon
+- Parsing minus sign

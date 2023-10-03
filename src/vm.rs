@@ -38,9 +38,8 @@ impl<'a> Env<'a> {
                 Token::Rational(r) => stack.push(Value::Rational(r.clone())),
                 Token::Complex(c) => stack.push(Value::Complex(c.clone())),
 
-                Token::Function(_f) => {
-                    todo!("Implement function application")
-                }
+                Token::Pi(r) => stack.push(Value::Pi(r.clone(), -1)),
+
                 Token::Add => {
                     match unsafe { BUILTINS.get(&'+').unwrap_unchecked() }.call(stack.clone()) {
                         Err(err) => return Err((err, loc.clone())),
@@ -81,6 +80,14 @@ impl<'a> Env<'a> {
                         }
                     }
                 }
+                Token::Root => {
+                    match unsafe { BUILTINS.get(&'√').unwrap_unchecked() }.call(stack.clone()) {
+                        Err(err) => return Err((err, loc.clone())),
+                        Ok(stack) => {
+                            self.stack = stack;
+                        }
+                    }
+                }
                 Token::Factorial => {
                     match unsafe { BUILTINS.get(&'!').unwrap_unchecked() }.call(stack.clone()) {
                         Err(err) => return Err((err, loc.clone())),
@@ -98,7 +105,16 @@ impl<'a> Env<'a> {
                     }
                 }
 
-                _ => todo!("Implement other tokens"),
+                Token::Function(_f) => {
+                    todo!("Implement function application")
+                }
+                Token::Inverse => todo!("Inverse"),
+
+                Token::InvalidState => unreachable!(),
+            }
+
+            if let Value::InvalidState(err) = self.stack.last().unwrap() {
+                return Err((err.clone(), loc.clone()));
             }
         }
 

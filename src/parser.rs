@@ -25,15 +25,20 @@ pub enum Token {
     Complex(Complex),
     // String(String)
     // List(Vec<Token>),
-    Function(Vec<(Token, Loc)>),
+
+    Pi(Rational),
 
     Add,
     Subtract,
     Multiply,
     Divide,
     Power,
+    Root,
     Factorial,
     Modulo,
+
+    Function(Vec<(Token, Loc)>),
+    Inverse,
 
     Spacing, // Otherwise Complex parsing consumes the previous token even when seperated by a space
     InvalidState,
@@ -47,14 +52,19 @@ impl Clone for Token {
             Rational(r) => Rational(r.clone()),
             Complex(c) => Complex(c.clone()),
 
-            Function(tokens) => Function(tokens.clone()),
+            Pi(r) => Pi(r.clone()),
+
             Add => Add,
             Subtract => Subtract,
             Multiply => Multiply,
             Divide => Divide,
             Power => Power,
+            Root => Root,
             Factorial => Factorial,
             Modulo => Modulo,
+
+            Function(tokens) => Function(tokens.clone()),
+            Inverse => Inverse,
 
             Spacing => Spacing,
             InvalidState => InvalidState,
@@ -70,6 +80,25 @@ impl Display for Token {
             Integer(n) => write!(f, "{}", n),
             Rational(r) => write!(f, "{}", r),
             Complex(c) => write!(f, "{}", c),
+
+            Pi(r) =>{
+                let (n, d) = r.clone().into_numer_denom();
+                 write!(f, "{}", match (n.to_i8().unwrap(), d.to_i8().unwrap()) {
+                (1, 2) => todo!(),
+                (1, 1) => "π",
+                (2, 1) => "τ",
+                _ => unreachable!()
+            })},
+
+            Add => write!(f, "+"),
+            Subtract => write!(f, "-"),
+            Multiply => write!(f, "×"),
+            Divide => write!(f, "÷"),
+            Power => write!(f, "ⁿ"),
+            Root => write!(f, "√"),
+            Factorial => write!(f, "!"),
+            Modulo => write!(f, "◿"),
+
             Function(tokens) => {
                 write!(f, "(")?;
                 for token in tokens {
@@ -77,14 +106,7 @@ impl Display for Token {
                 }
                 write!(f, ")")
             }
-
-            Add => write!(f, "+"),
-            Subtract => write!(f, "-"),
-            Multiply => write!(f, "×"),
-            Divide => write!(f, "÷"),
-            Power => write!(f, "ⁿ"),
-            Factorial => write!(f, "!"),
-            Modulo => write!(f, "◿"),
+            Inverse => write!(f, "⁻¹"),
 
             Spacing => write!(f, ""),
             InvalidState => write!(f, "<InvalidState>"),
@@ -240,13 +262,29 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
 
                 Token::Complex(Complex::with_val(128, (real, imaginary)))
             })(),
+            'π' => Token::Pi(Rational::from((1, 1))),
+            'τ' => Token::Pi(Rational::from((2, 1))),
 
             '+' => Token::Add,
             '-' => Token::Subtract,
             '×' => Token::Multiply,
             '÷' => Token::Divide,
             'ⁿ' => Token::Power,
+            '√' => Token::Root,
+            '!' => Token::Factorial,
             '◿' => Token::Modulo,
+
+            '⁻' => {
+                if let Some('¹') = chars.peek() {
+                    chars.next();
+                    loc.end += 1;
+                    loc.column += 1;
+
+                    Token::Inverse
+                } else {
+                    Err((SyntaxError::InvalidSymbol(c), loc.clone(), tokens.clone()))?
+                }
+            },
 
             '(' => {
                 let mut depth = 1;

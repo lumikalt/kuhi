@@ -15,6 +15,8 @@ lazy_static! {
         ('-', Builtin::new(sub, add, 2)),
         ('×', Builtin::new(mul, div, 2)),
         ('÷', Builtin::new(div, mul, 2)),
+        ('ⁿ', Builtin::new(pow, root, 2)),
+        ('√', Builtin::new(root, pow, 2)),
     ]);
 }
 

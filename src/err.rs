@@ -45,6 +45,7 @@ pub enum RuntimeError {
 
     ExponentTooBig(Integer),
     ZerothRoot,
+    DivideByZero,
 }
 
 impl Display for RuntimeError {
@@ -69,6 +70,7 @@ impl Display for RuntimeError {
             }
             RuntimeError::ExponentTooBig(n) => write!(f, "exponent too big: {}", n),
             RuntimeError::ZerothRoot => write!(f, "cannot take the 0th root"),
+            RuntimeError::DivideByZero => write!(f, "cannot divide by zero"),
         }
     }
 }
@@ -92,6 +94,7 @@ impl RuntimeError {
             ),
             RuntimeError::ExponentTooBig(_) => format!("max is {} (u32::MAX)", u32::MAX),
             RuntimeError::ZerothRoot => format!("try filtering the 0s on the stack"),
+            RuntimeError::DivideByZero => format!("try filtering the 0s on the stack\nuse ε to produce a small number instead of 0"),
         }
     }
 }
