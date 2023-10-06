@@ -127,6 +127,7 @@ fn root(stack: Stack) -> RuntimeResult {
 /// As the program is ran from right to left, the resulting array will be in reverse.
 fn __pop_n<const N: usize>(stack: Vec<Value>) -> ([Value; N], Stack) {
     let mut stack = stack.clone();
+    // Already checked previously that the size is correct, so invariants hold
     let values = [(); N].map(|_| unsafe { stack.pop().unwrap_unchecked() });
     (values, dbg!(stack))
 }

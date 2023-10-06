@@ -31,6 +31,7 @@ pub enum Token {
     E(Rational, i32),
 
     Dup,
+    Pop,
     Flip,
     Minus,
 
@@ -64,6 +65,7 @@ impl Clone for Token {
             E(r, pow) => E(r.clone(), *pow),
 
             Dup => Dup,
+            Pop => Pop,
             Flip => Flip,
             Minus => Minus,
 
@@ -112,6 +114,7 @@ impl Display for Token {
             E(r, pow) => write!(f, "{}e^{}/{}", r.numer(), pow, r.denom()),
 
             Dup => write!(f, "."),
+            Pop => write!(f, ","),
             Flip => write!(f, "↔"),
             Minus => write!(f, "⁻"),
 
@@ -161,6 +164,22 @@ pub fn parse(
             }
 
             '0'..='9' => (|| {
+                // Consume previous token if it's a ⁻
+                let prev = tokens.clone();
+                let otherwise = (Token::InvalidState.clone(), loc.clone());
+                let prev = &prev.last().unwrap_or(&otherwise);
+
+                let sign = match &prev.0 {
+                    Token::Minus => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        -1
+                    }
+                    Token::Spacing | Token::InvalidState | _ => 1,
+                };
+
                 let mut number = Integer::from(c.to_digit(10).unwrap());
                 while let Some('0'..='9') = chars.peek() {
                     number *= 10;
@@ -185,7 +204,7 @@ pub fn parse(
                         loc.end += 1;
                         loc.column += 1;
                     } else {
-                        // Undo changes
+                        // Undo changes, end token
                         loc.end -= 1;
                         loc.column -= 1;
 
@@ -199,12 +218,12 @@ pub fn parse(
                         loc.end += 1;
                         loc.column += 1;
                     }
-                    Token::Rational(Rational::from((
+                    Token::Rational(sign * Rational::from((
                         number * denominator.clone() + decimal,
                         denominator,
                     )))
                 } else {
-                    Token::Integer(number)
+                    Token::Integer(sign * number)
                 }
             })(),
             'i' => (|| {
@@ -328,7 +347,7 @@ pub fn parse(
                         tokens.pop();
                         r.clone()
                     }
-                    Token::Spacing | Token::InvalidState | _ => Rational::from((0, 1)),
+                    Token::Spacing | Token::InvalidState | _ => Rational::from((1, 1)),
                 };
                 Token::Pi(times)
             }
@@ -343,7 +362,7 @@ pub fn parse(
                         // set start of loc to previous token's
                         loc.start = prev.1.start;
                         loc.column = prev.1.column;
-                        tokens.pop();
+                        // tokens.pop();
                         Rational::from((n, 1))
                     }
                     Token::Rational(r) => {
@@ -353,7 +372,7 @@ pub fn parse(
                         tokens.pop();
                         r.clone()
                     }
-                    Token::Spacing | Token::InvalidState | _ => Rational::from((0, 1)),
+                    Token::Spacing | Token::InvalidState | _ => Rational::from((1, 1)),
                 };
                 Token::Pi(2 * times)
             }
@@ -361,7 +380,7 @@ pub fn parse(
             'ε' => Token::Epsilon,
 
             '.' => Token::Dup,
-            ',' => Err((SyntaxError::InvalidSymbol(','), loc.clone(), tokens.clone()))?,
+            ',' => Token::Pop,
             '↔' => Token::Flip,
 
             '+' => Token::Add,
@@ -375,8 +394,8 @@ pub fn parse(
 
             '⁻' => {
                 if let Some('¹') = chars.peek() {
-                    chars.next();
-                    loc.end += 1;
+                    let c = chars.next();
+                    loc.end += c.unwrap().len_utf8();
                     loc.column += 1;
 
                     Token::Inverse
@@ -427,7 +446,7 @@ pub fn parse(
 
         tokens.push((token, loc.clone()));
 
-        loc.end += 1;
+        loc.end += c.len_utf8();
         loc.start = loc.end;
         loc.column += 1;
     }

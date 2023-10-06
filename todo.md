@@ -1,3 +1,3 @@
-- Special parsing rules for pi and e?
-- Parsing Infinity and Epsilon
-- Parsing minus sign
+- Special parsing rules for e?
+- Allow negative sign in complex numbers' imaginary part
+- Properly handle the failure on unicode, currently only a hack.

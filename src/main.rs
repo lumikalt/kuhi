@@ -42,7 +42,7 @@ fn main() -> anyhow::Result<()> {
 
         editor.add_history_entry(input.clone())?;
 
-        input += "\n";
+        input.push('\n');
         full_input.push_str(&input.clone());
 
 
@@ -50,10 +50,12 @@ fn main() -> anyhow::Result<()> {
 
         let tokens = match parse(&input, &mut loc) {
             Ok(tokens) => {
-                dbg!(tokens)
-                // tokens
+                // dbg!(tokens)
+                tokens
             }
             Err(err) => {
+                dbg!(loc.clone());
+                dbg!(full_input);
                 let start = err.1.start;
                 let end = err.1.end + 1;
 

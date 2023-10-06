@@ -55,7 +55,7 @@ impl Display for RuntimeError {
         match self {
             RuntimeError::InvalidPop { len, arity } => write!(
                 f,
-                "attempt to pop {} values from a stack of size {}",
+                "attempt to pop {} times from a stack of size {}",
                 arity, len
             ),
             RuntimeError::InvalidFoldWith(arity) => {
@@ -83,7 +83,7 @@ impl RuntimeError {
         match self {
             RuntimeError::InvalidPop { len: _, arity: _ } => {
                 format!(
-                    "make sure you are using the correct function or add more values to the stack"
+                    "ensure you are using the correct function or add more values to the stack"
                 )
             }
             RuntimeError::InvalidFoldWith(_) => format!("can only fold using binary operations"),

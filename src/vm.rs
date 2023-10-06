@@ -51,6 +51,13 @@ impl Env {
                         return Err((RuntimeError::InvalidPop { len: stack.len(), arity: 1 }, loc.clone()));
                     }
                 }
+                Token::Pop => {
+                    if let Some(_) = stack.pop() {
+                        // Do nothing
+                    } else {
+                        return Err((RuntimeError::InvalidPop { len: stack.len(), arity: 1 }, loc.clone()));
+                    }
+                }
                 Token::Flip => { match unsafe { BUILTINS.get(&'.').unwrap_unchecked() }.call(stack.clone()) {
                         Err(err) => return Err((err, loc.clone())),
                         Ok(stack) => {
