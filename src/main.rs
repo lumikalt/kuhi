@@ -41,9 +41,9 @@ fn main() -> anyhow::Result<()> {
         input = Formatter::new(input).format();
 
         editor.add_history_entry(input.clone())?;
-        full_input.push_str(&input.clone());
 
         input += "\n";
+        full_input.push_str(&input.clone());
 
 
         let file = SimpleFile::new("<repl>", full_input.clone());

@@ -145,22 +145,15 @@ pub fn parse(
 ) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(Token, Loc)>)> {
     let mut tokens: Vec<(Token, Loc)> = Vec::new();
     let mut chars = input.chars().peekable();
-    // Track token position por parsing errors.
+    // Track token position for parsing errors.
     // On the run step, this is used for runtime error reporting, even when
     // the parse was successeful.
 
     while let Some(c) = chars.next() {
+        // dbg!((c, loc.clone()));
         let token = match c {
-            ' ' | '\r' => {
-                loc.start += 1;
-                loc.end += 1;
-                loc.column += 1;
-
-                Token::Spacing
-            }
+            ' ' | '\r' => Token::Spacing,
             '\n' => {
-                loc.start += 1;
-                loc.end += 1;
                 loc.line += 1;
                 loc.column = 1;
 
@@ -211,7 +204,6 @@ pub fn parse(
                         denominator,
                     )))
                 } else {
-                    dbg!(loc.clone());
                     Token::Integer(number)
                 }
             })(),
@@ -369,10 +361,7 @@ pub fn parse(
             'ε' => Token::Epsilon,
 
             '.' => Token::Dup,
-            ',' => {
-                let loc = dbg!(loc.clone());
-                Err((SyntaxError::InvalidSymbol(','), loc.clone(), tokens.clone()))?
-            },
+            ',' => Err((SyntaxError::InvalidSymbol(','), loc.clone(), tokens.clone()))?,
             '↔' => Token::Flip,
 
             '+' => Token::Add,
