@@ -29,7 +29,7 @@ pub enum Value {
     Infinity(i8),
     Undefined,
     Pi(Rational, i8), // i8 for exponent sign (1 for pi, -1 for pi^-1)
-    E(Rational, f64),
+    E(Rational, i32),
     Epsilon(i8), // Very small number, such that 1/Epsilon == +Infinity
 
     InvalidState(RuntimeError),
@@ -165,66 +165,6 @@ impl Value {
     }
 }
 
-impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Value::*;
-
-        match self {
-            Integer(n) => write!(f, "{}", n),
-            Rational(r) => write!(f, "{}", r),
-            Complex(z) => write!(f, "{}+{}i", z.real().to_f64(), z.imag().to_f64()),
-            Float(x) => write!(f, "{}", x.to_f64()),
-
-            List(l) => {
-                write!(f, "(")?;
-                for v in l {
-                    write!(f, "{} ", v)?;
-                }
-                write!(f, ")")
-            }
-            Function(_) => write!(f, "<function>"),
-
-            Infinity(sign) => {
-                write!(
-                    f,
-                    "{}∞",
-                    match sign.signum() {
-                        1 => "+",
-                        -1 => "-",
-                        _ => unreachable!(),
-                    }
-                )
-            }
-            Undefined => write!(f, "undef"),
-            Pi(r, esign) => write!(
-                f,
-                "{}{}{}",
-                r.numer(),
-                match esign {
-                    1 => "π/",
-                    -1 => "/π",
-                    _ => unreachable!(),
-                },
-                r.denom()
-            ),
-            E(r, exp) => write!(f, "{}e^{}/{}", r.numer(), exp, r.denom()),
-            Epsilon(sign) => {
-                write!(
-                    f,
-                    "{}ε",
-                    match sign.signum() {
-                        1 => "+",
-                        -1 => "-",
-                        _ => unreachable!(),
-                    }
-                )
-            }
-
-            InvalidState(err) => write!(f, "{}", err),
-        }
-    }
-}
-
 impl From<Token> for Value {
     fn from(token: Token) -> Self {
         match token {
@@ -265,26 +205,22 @@ impl Add for Value {
                 x + rug::Float::with_val(128, r.numer()) / rug::Float::with_val(128, r.denom()),
             ),
 
-            (Infinity(a), Infinity(b)) => Infinity(a * b),
-            (Infinity(a), Integer(n)) | (Integer(n), Infinity(a)) => match n {
-                n if n.is_positive() => Infinity(a),
-                n if n.is_negative() => Infinity(-a),
-                _ => Undefined,
-            },
-            (Infinity(a), Rational(r)) | (Rational(r), Infinity(a)) => match r {
-                r if r.is_positive() => Infinity(a),
-                r if r.is_negative() => Infinity(-a),
-                _ => Undefined,
-            },
-            (Infinity(a), Float(x)) | (Float(x), Infinity(a)) => {
-                if x.is_zero() {
-                    Undefined
+            (Infinity(a), Infinity(b)) => {
+                if a == b {
+                    Infinity(a)
                 } else {
-                    Infinity(a * x.signum().to_f32() as i8)
+                    Undefined
                 }
             }
+            (Infinity(a), Integer(_))
+            | (Integer(_), Infinity(a))
+            | (Infinity(a), Rational(_))
+            | (Rational(_), Infinity(a))
+            | (Infinity(a), Float(_))
+            | (Float(_), Infinity(a)) => Infinity(a),
+
             (Infinity(_), Complex(_)) | (Complex(_), Infinity(_)) => {
-                todo!("Implement Infinity + Complex")
+                todo!("Implement Infinity + Complex (study complex analysis)")
             }
 
             (Epsilon(a), Epsilon(b)) => {
@@ -294,12 +230,7 @@ impl Add for Value {
                     Undefined
                 }
             }
-            (Epsilon(_), Integer(n)) | (Integer(n), Epsilon(_)) => Integer(n),
-            (Epsilon(_), Rational(r)) | (Rational(r), Epsilon(_)) => Rational(r),
-            (Epsilon(_), Float(x)) | (Float(x), Epsilon(_)) => Float(x),
-            (Epsilon(_), Complex(z)) | (Complex(z), Epsilon(_)) => Complex(z),
-
-            (Infinity(a), Epsilon(_)) | (Epsilon(_), Infinity(a)) => Infinity(a),
+            (Epsilon(_), anything) | (anything, Epsilon(_)) => anything,
 
             (Undefined, _) | (_, Undefined) => Undefined,
 
@@ -335,7 +266,6 @@ impl Add for Value {
             // (E(r, exp), Integer(n)) | (Integer(n), E(r, exp)) => Rational(n * r),
             // (E(r, exp), Rational(s)) | (Rational(s), E(r, exp)) => Rational(s * r),
             // (E(r, exp), Complex(c)) | (Complex(c), E(r, exp)) => Complex(c * r * E),
-
             _ => {
                 todo!()
             }
@@ -352,6 +282,7 @@ impl Neg for Value {
         match self {
             Integer(n) => Integer(-n),
             Rational(r) => Rational(-r),
+            Float(x) => Float(-x),
             Complex(c) => Complex(-c),
 
             Infinity(sign) => Infinity(-sign),
@@ -384,17 +315,138 @@ impl Mul for Value {
         match (self, rhs) {
             (Integer(n), Integer(m)) => Integer(n * m),
             (Rational(r), Rational(s)) => Rational(r * s),
+            (Float(x), Float(y)) => Float(x * y),
             (Complex(c), Complex(d)) => Complex(c * d),
-            (Integer(n), Rational(r)) => Rational(n * r),
-            (Rational(r), Integer(n)) => Rational(n * r),
-            (Integer(n), Complex(c)) => Complex(n * c),
-            (Complex(c), Integer(n)) => Complex(n * c),
-            (Rational(r), Complex(c)) => Complex(c * r),
-            (Complex(c), Rational(r)) => Complex(c * r),
+            (Integer(n), Rational(r)) | (Rational(r), Integer(n)) => Rational(n * r),
+            (Integer(n), Complex(c)) | (Complex(c), Integer(n)) => Complex(n * c),
+            (Rational(r), Complex(c)) | (Complex(c), Rational(r)) => Complex(c * r),
+            (Float(x), Integer(n)) | (Integer(n), Float(x)) => Float(x * n),
+            (Float(x), Rational(r)) | (Rational(r), Float(x)) => Float(
+                x * rug::Float::with_val(128, r.numer()) / rug::Float::with_val(128, r.denom()),
+            ),
+            (Float(x), Complex(c)) | (Complex(c), Float(x)) => Complex(x * c),
 
+            (Infinity(a), Infinity(b)) => Infinity(a * b),
+            (Infinity(a), Integer(n)) | (Integer(n), Infinity(a)) => match n {
+                n if n.is_positive() => Infinity(a),
+                n if n.is_negative() => Infinity(-a),
+                _ => Undefined,
+            },
+            (Infinity(a), Rational(r)) | (Rational(r), Infinity(a)) => match r {
+                r if r.is_positive() => Infinity(a),
+                r if r.is_negative() => Infinity(-a),
+                _ => Undefined,
+            },
+            (Infinity(a), Float(x)) | (Float(x), Infinity(a)) => {
+                if x.is_zero() {
+                    Undefined
+                } else {
+                    Infinity(a * x.signum().to_f32() as i8)
+                }
+            }
+            (Infinity(_), Complex(_)) | (Complex(_), Infinity(_)) => {
+                todo!("Implement Infinity + Complex (study complex analysis)")
+            }
+
+            (Epsilon(a), Epsilon(b)) => Epsilon(a * b),
+            (Infinity(_), Epsilon(_)) | (Epsilon(_), Infinity(_)) => Undefined,
+
+            (Epsilon(a), Integer(n)) | (Integer(n), Epsilon(a)) => Integer(n * a),
+            (Epsilon(a), Rational(r)) | (Rational(r), Epsilon(a)) => Rational(r * a),
+            (Epsilon(a), Float(x)) | (Float(x), Epsilon(a)) => Float(x * a),
+            (Epsilon(a), Complex(z)) | (Complex(z), Epsilon(a)) => Complex(z * a),
+
+            (Undefined, _) | (_, Undefined) => Undefined,
+
+            (Pi(r, esign), Integer(n)) | (Integer(n), Pi(r, esign)) => Pi(r.clone() * n, esign),
+            (Pi(r, esign), Rational(s)) | (Rational(s), Pi(r, esign)) => Pi(r.clone() * s, esign),
+            (Pi(r, esign), Complex(c)) | (Complex(c), Pi(r, esign)) => Complex(
+                (rug::Float::with_val(128, r.numer()) / rug::Float::with_val(128, r.denom()))
+                    * match esign {
+                        1 => PI.clone(),
+                        -1 => PI.clone().recip(),
+                        _ => unreachable!(),
+                    }
+                    * c,
+            ),
+
+            // (E(r, exp), Integer(n)) | (Integer(n), E(r, exp)) => Rational(n * r),
+            // (E(r, exp), Rational(s)) | (Rational(s), E(r, exp)) => Rational(s * r),
+            // (E(r, exp), Complex(c)) | (Complex(c), E(r, exp)) => Complex(c * r * E),
             _ => {
                 todo!()
             }
+        }
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Value::*;
+
+        match self {
+            Integer(n) => write!(f, "{}", n.to_string().replace('-', "⁻")),
+            Rational(r) => write!(f, "{}", r.to_string().replace('-', "⁻")),
+            Complex(z) => write!(
+                f,
+                "{}i{}",
+                z.real().to_f64().to_string().replace('-', "⁻"),
+                z.imag().to_f64().to_string().replace('-', "⁻")
+            ),
+            Float(x) => write!(f, "{}", x.to_f64().to_string().replace('-', "⁻")),
+
+            List(l) => {
+                write!(f, "(")?;
+                for v in l {
+                    write!(f, "{} ", v)?;
+                }
+                write!(f, ")")
+            }
+            Function(_) => write!(f, "<function>"),
+
+            Infinity(sign) => {
+                write!(
+                    f,
+                    "{}∞",
+                    match sign.signum() {
+                        1 => "+",
+                        -1 => "⁻",
+                        _ => unreachable!(),
+                    }
+                )
+            }
+            Epsilon(sign) => {
+                write!(
+                    f,
+                    "{}ε",
+                    match sign.signum() {
+                        1 => "+",
+                        -1 => "⁻",
+                        _ => unreachable!(),
+                    }
+                )
+            }
+            Undefined => write!(f, "undef"),
+            Pi(r, esign) => write!(
+                f,
+                "{}{}{}",
+                r.numer().to_string().replace('-', "⁻"),
+                match esign {
+                    1 => "π/",
+                    -1 => "/π",
+                    _ => unreachable!(),
+                },
+                r.denom().to_string().replace('-', "⁻")
+            ),
+            E(r, exp) => write!(
+                f,
+                "{}e^{}/{}",
+                r.numer().to_string().replace('-', "⁻"),
+                exp,
+                r.denom().to_string().replace('-', "⁻")
+            ),
+
+            InvalidState(err) => write!(f, "{}", err),
         }
     }
 }

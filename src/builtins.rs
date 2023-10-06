@@ -10,7 +10,9 @@ pub type Func = fn(Stack) -> RuntimeResult;
 
 lazy_static! {
     pub static ref BUILTINS: HashMap<char, Builtin> = HashMap::from([
-        ('.', Builtin::new(dup, pop, 1)),
+        ('.', Builtin::new(dup, |_| Err(RuntimeError::NoInverse), 1)),
+        (',', Builtin::new(pop, |_| Err(RuntimeError::NoInverse), 1)),
+        ('↔', Builtin::new(flip, flip, 2)),
         ('+', Builtin::new(add, sub, 2)),
         ('-', Builtin::new(sub, add, 2)),
         ('×', Builtin::new(mul, div, 2)),
@@ -71,6 +73,14 @@ fn pop(stack: Stack) -> RuntimeResult {
     Ok(stack)
 }
 
+fn flip(stack: Stack) -> RuntimeResult {
+    let ([y, x], mut stack) = __pop_n(stack);
+
+    stack.push(x);
+    stack.push(y);
+    Ok(stack)
+}
+
 fn add(stack: Stack) -> RuntimeResult {
     let ([y, x], mut stack) = __pop_n(stack);
 
@@ -118,5 +128,5 @@ fn root(stack: Stack) -> RuntimeResult {
 fn __pop_n<const N: usize>(stack: Vec<Value>) -> ([Value; N], Stack) {
     let mut stack = stack.clone();
     let values = [(); N].map(|_| unsafe { stack.pop().unwrap_unchecked() });
-    (values, stack)
+    (values, dbg!(stack))
 }

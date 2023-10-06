@@ -9,22 +9,22 @@ use crate::{
 
 /// Runtime
 
-pub struct Env<'a> {
+pub struct Env {
     pub stack: Vec<Value>,
 
-    tokens: &'a Vec<(Token, Loc)>,
+    tokens: Vec<(Token, Loc)>,
 }
 
-impl<'a> Env<'a> {
-    pub fn new(tokens: &'a Vec<(Token, Loc)>) -> Self {
+impl Env {
+    pub fn new(tokens: Vec<(Token, Loc)>) -> Self {
         Self {
             stack: Vec::new(),
             tokens,
         }
     }
 
-    pub fn repurpose(&mut self, tokens: &'a Vec<(Token, Loc)>) -> &mut Self {
-        self.tokens = tokens;
+    pub fn repurpose(&mut self, tokens: &Vec<(Token, Loc)>) -> &mut Self {
+        self.tokens = tokens.clone();
 
         self
     }
@@ -38,7 +38,33 @@ impl<'a> Env<'a> {
                 Token::Rational(r) => stack.push(Value::Rational(r.clone())),
                 Token::Complex(c) => stack.push(Value::Complex(c.clone())),
 
-                Token::Pi(r) => stack.push(Value::Pi(r.clone(), -1)),
+                Token::Infinity => stack.push(Value::Infinity(1)),
+                Token::Epsilon => stack.push(Value::Epsilon(1)),
+                Token::Pi(r) => stack.push(Value::Pi(r.clone(), 1)),
+                Token::E(r, pow) => stack.push(Value::E(r.clone(), *pow)),
+
+                Token::Dup => {
+                    if let Some(value) = stack.pop() {
+                        stack.push(value.clone());
+                        stack.push(value);
+                    } else {
+                        return Err((RuntimeError::InvalidPop { len: stack.len(), arity: 1 }, loc.clone()));
+                    }
+                }
+                Token::Flip => { match unsafe { BUILTINS.get(&'.').unwrap_unchecked() }.call(stack.clone()) {
+                        Err(err) => return Err((err, loc.clone())),
+                        Ok(stack) => {
+                            self.stack = stack;
+                        }
+                    }
+                }
+                Token::Minus => {
+                    if let Some(value) = stack.pop() {
+                        stack.push(-value);
+                    } else {
+                        return Err((RuntimeError::InvalidPop { len: stack.len(), arity: 1 }, loc.clone()));
+                    }
+                }
 
                 Token::Add => {
                     match unsafe { BUILTINS.get(&'+').unwrap_unchecked() }.call(stack.clone()) {
@@ -122,7 +148,7 @@ impl<'a> Env<'a> {
     }
 }
 
-impl Display for Env<'_> {
+impl Display for Env {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let stack = self.stack.clone();
 

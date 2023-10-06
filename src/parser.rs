@@ -25,8 +25,14 @@ pub enum Token {
     Complex(Complex),
     // String(String)
     // List(Vec<Token>),
-
+    Infinity,
+    Epsilon,
     Pi(Rational),
+    E(Rational, i32),
+
+    Dup,
+    Flip,
+    Minus,
 
     Add,
     Subtract,
@@ -52,7 +58,14 @@ impl Clone for Token {
             Rational(r) => Rational(r.clone()),
             Complex(c) => Complex(c.clone()),
 
+            Infinity => Infinity,
+            Epsilon => Epsilon,
             Pi(r) => Pi(r.clone()),
+            E(r, pow) => E(r.clone(), *pow),
+
+            Dup => Dup,
+            Flip => Flip,
+            Minus => Minus,
 
             Add => Add,
             Subtract => Subtract,
@@ -81,14 +94,26 @@ impl Display for Token {
             Rational(r) => write!(f, "{}", r),
             Complex(c) => write!(f, "{}", c),
 
-            Pi(r) =>{
+            Infinity => write!(f, "∞"),
+            Epsilon => write!(f, "ε"),
+            Pi(r) => {
                 let (n, d) = r.clone().into_numer_denom();
-                 write!(f, "{}", match (n.to_i8().unwrap(), d.to_i8().unwrap()) {
-                (1, 2) => todo!(),
-                (1, 1) => "π",
-                (2, 1) => "τ",
-                _ => unreachable!()
-            })},
+                write!(
+                    f,
+                    "{}",
+                    match (n.to_i8().unwrap(), d.to_i8().unwrap()) {
+                        (1, 2) => todo!(),
+                        (1, 1) => "π",
+                        (2, 1) => "τ",
+                        _ => unreachable!(),
+                    }
+                )
+            }
+            E(r, pow) => write!(f, "{}e^{}/{}", r.numer(), pow, r.denom()),
+
+            Dup => write!(f, "."),
+            Flip => write!(f, "↔"),
+            Minus => write!(f, "⁻"),
 
             Add => write!(f, "+"),
             Subtract => write!(f, "-"),
@@ -114,18 +139,15 @@ impl Display for Token {
     }
 }
 
-pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(Token, Loc)>)> {
+pub fn parse(
+    input: &str,
+    loc: &mut Loc,
+) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(Token, Loc)>)> {
     let mut tokens: Vec<(Token, Loc)> = Vec::new();
     let mut chars = input.chars().peekable();
     // Track token position por parsing errors.
     // On the run step, this is used for runtime error reporting, even when
     // the parse was successeful.
-    let mut loc = Loc {
-        start: 0,
-        end: 0,
-        line: 1,
-        column: 1,
-    };
 
     while let Some(c) = chars.next() {
         let token = match c {
@@ -189,6 +211,7 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                         denominator,
                     )))
                 } else {
+                    dbg!(loc.clone());
                     Token::Integer(number)
                 }
             })(),
@@ -200,15 +223,41 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                 let prev = &prev.last().unwrap_or(&otherwise);
 
                 let real = match &prev.0 {
-                    Token::Integer(n) => Rational::from((n, 1)),
-                    Token::Rational(r) => r.clone(),
-                    Token::Spacing | Token::InvalidState | _ => Rational::from((0, 1)),
+                    Token::Integer(n) => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        Rational::from((n, 1))
+                    }
+                    Token::Rational(r) => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        r.clone()
+                    }
+                    Token::Spacing | _ => Rational::from((0, 1)),
                 };
 
                 // Get imaginary part
                 let mut number = Integer::from(1);
+                let mut sign = 1;
+                if let Some('⁻') = chars.peek() {
+                    sign = -1;
+                    chars.next();
+                    loc.end += 1;
+                    loc.column += 1;
+                }
                 if let Some('.') = chars.peek() {
-                    return Token::Complex(Complex::with_val(128, (real, 1)));
+                    if sign == -1 {
+                        return Err((
+                            SyntaxError::InvalidSymbol('⁻'),
+                            loc.clone(),
+                            tokens.clone(),
+                        ))?;
+                    }
+                    return Ok(Token::Complex(Complex::with_val(128, (real, 1))));
                 }
                 if let Some('0'..='9') = chars.peek() {
                     number = Integer::from(chars.next().unwrap().to_digit(10).unwrap());
@@ -260,10 +309,71 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                     Rational::from((number, 1))
                 };
 
-                Token::Complex(Complex::with_val(128, (real, imaginary)))
-            })(),
-            'π' => Token::Pi(Rational::from((1, 1))),
-            'τ' => Token::Pi(Rational::from((2, 1))),
+                Ok(Token::Complex(Complex::with_val(
+                    128,
+                    (real, sign * imaginary),
+                )))
+            })()?,
+
+            'π' => {
+                // Consume previous token (if any) when it's a Real type
+                let prev = tokens.clone();
+                let otherwise = (Token::InvalidState.clone(), loc.clone());
+                let prev = &prev.last().unwrap_or(&otherwise);
+
+                let times = match &prev.0 {
+                    Token::Integer(n) => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        Rational::from((n, 1))
+                    }
+                    Token::Rational(r) => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        r.clone()
+                    }
+                    Token::Spacing | Token::InvalidState | _ => Rational::from((0, 1)),
+                };
+                Token::Pi(times)
+            }
+            'τ' => {
+                // Consume previous token (if any) when it's a Real type
+                let prev = tokens.clone();
+                let otherwise = (Token::InvalidState.clone(), loc.clone());
+                let prev = &prev.last().unwrap_or(&otherwise);
+
+                let times = match &prev.0 {
+                    Token::Integer(n) => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        Rational::from((n, 1))
+                    }
+                    Token::Rational(r) => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        r.clone()
+                    }
+                    Token::Spacing | Token::InvalidState | _ => Rational::from((0, 1)),
+                };
+                Token::Pi(2 * times)
+            }
+            '∞' => Token::Infinity,
+            'ε' => Token::Epsilon,
+
+            '.' => Token::Dup,
+            ',' => {
+                let loc = dbg!(loc.clone());
+                Err((SyntaxError::InvalidSymbol(','), loc.clone(), tokens.clone()))?
+            },
+            '↔' => Token::Flip,
 
             '+' => Token::Add,
             '-' => Token::Subtract,
@@ -282,9 +392,9 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
 
                     Token::Inverse
                 } else {
-                    Err((SyntaxError::InvalidSymbol(c), loc.clone(), tokens.clone()))?
+                    Token::Minus
                 }
-            },
+            }
 
             '(' => {
                 let mut depth = 1;
@@ -316,7 +426,7 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
                         tokens.clone(),
                     ))?;
                 }
-                Token::Function(parse(sub.as_str())?)
+                Token::Function(parse(sub.as_str(), loc)?)
             }
             ')' => Err((
                 SyntaxError::UnmatchedParenthesis(false),
@@ -333,5 +443,11 @@ pub fn parse(input: &str) -> Result<Vec<(Token, Loc)>, (SyntaxError, Loc, Vec<(T
         loc.column += 1;
     }
 
-    Ok(tokens)
+    Ok(tokens
+        .into_iter()
+        .filter(|(token, _)| match token {
+            Token::Spacing => false,
+            _ => true,
+        })
+        .collect())
 }
