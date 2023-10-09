@@ -57,6 +57,16 @@ impl Builtin {
         }
         (self.action)(stack)
     }
+
+    pub fn call_inverse(&self, stack: Stack) -> RuntimeResult {
+        if self.arity > stack.len() {
+            return Err(RuntimeError::InvalidPop {
+                len: stack.len(),
+                arity: self.arity,
+            });
+        }
+        (self.inverse)(stack)
+    }
 }
 
 fn dup(stack: Stack) -> RuntimeResult {
@@ -76,8 +86,8 @@ fn pop(stack: Stack) -> RuntimeResult {
 fn flip(stack: Stack) -> RuntimeResult {
     let ([y, x], mut stack) = __pop_n(stack);
 
-    stack.push(x);
     stack.push(y);
+    stack.push(x);
     Ok(stack)
 }
 
@@ -129,5 +139,5 @@ fn __pop_n<const N: usize>(stack: Vec<Value>) -> ([Value; N], Stack) {
     let mut stack = stack.clone();
     // Already checked previously that the size is correct, so invariants hold
     let values = [(); N].map(|_| unsafe { stack.pop().unwrap_unchecked() });
-    (values, dbg!(stack))
+    (values, stack)
 }

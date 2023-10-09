@@ -30,22 +30,19 @@ pub enum Token {
     Pi(Rational),
     E(Rational, i32),
 
+    List(Vec<Token>),
+    _UnfinishedList(Vec<(Token, Loc)>),
+
+    Scope(Vec<(Token, Loc)>),
+
     Dup,
     Pop,
     Flip,
     Minus,
 
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Power,
-    Root,
-    Factorial,
-    Modulo,
-
     Function(Vec<(Token, Loc)>),
-    Inverse,
+    FunctionCall(char),
+    Inverse(Box<Token>, Loc),
 
     Spacing, // Otherwise Complex parsing consumes the previous token even when seperated by a space
     InvalidState,
@@ -64,22 +61,19 @@ impl Clone for Token {
             Pi(r) => Pi(r.clone()),
             E(r, pow) => E(r.clone(), *pow),
 
+            List(tokens) => List(tokens.clone()),
+            _UnfinishedList(tokens) => _UnfinishedList(tokens.clone()),
+
+            Scope(tokens) => Scope(tokens.clone()),
+
             Dup => Dup,
             Pop => Pop,
             Flip => Flip,
             Minus => Minus,
 
-            Add => Add,
-            Subtract => Subtract,
-            Multiply => Multiply,
-            Divide => Divide,
-            Power => Power,
-            Root => Root,
-            Factorial => Factorial,
-            Modulo => Modulo,
-
             Function(tokens) => Function(tokens.clone()),
-            Inverse => Inverse,
+            FunctionCall(f) => FunctionCall(f.clone()),
+            Inverse(tok, loc) => Inverse(Box::new(*tok.clone()), loc.clone()),
 
             Spacing => Spacing,
             InvalidState => InvalidState,
@@ -113,19 +107,39 @@ impl Display for Token {
             }
             E(r, pow) => write!(f, "{}e^{}/{}", r.numer(), pow, r.denom()),
 
+            List(tokens) => write!(
+                f,
+                "[{}]",
+                tokens
+                    .into_iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+            _UnfinishedList(tokens) => {
+                write!(f, "<")?;
+                for token in tokens {
+                    write!(f, "{} ", token.0)?;
+                }
+                write!(f, "…>")
+            }
+
+            Scope(tokens) => {
+                write!(
+                    f,
+                    "{{{}}}",
+                    tokens
+                        .into_iter()
+                        .map(|v| v.0.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
+            }
+
             Dup => write!(f, "."),
             Pop => write!(f, ","),
             Flip => write!(f, "↔"),
             Minus => write!(f, "⁻"),
-
-            Add => write!(f, "+"),
-            Subtract => write!(f, "-"),
-            Multiply => write!(f, "×"),
-            Divide => write!(f, "÷"),
-            Power => write!(f, "ⁿ"),
-            Root => write!(f, "√"),
-            Factorial => write!(f, "!"),
-            Modulo => write!(f, "◿"),
 
             Function(tokens) => {
                 write!(f, "(")?;
@@ -134,7 +148,8 @@ impl Display for Token {
                 }
                 write!(f, ")")
             }
-            Inverse => write!(f, "⁻¹"),
+            FunctionCall(c) => write!(f, "{}", c),
+            Inverse(tok, _) => write!(f, "⁻¹{}", tok.to_string()),
 
             Spacing => write!(f, ""),
             InvalidState => write!(f, "<InvalidState>"),
@@ -218,10 +233,12 @@ pub fn parse(
                         loc.end += 1;
                         loc.column += 1;
                     }
-                    Token::Rational(sign * Rational::from((
-                        number * denominator.clone() + decimal,
-                        denominator,
-                    )))
+                    Token::Rational(
+                        sign * Rational::from((
+                            number * denominator.clone() + decimal,
+                            denominator,
+                        )),
+                    )
                 } else {
                     Token::Integer(sign * number)
                 }
@@ -379,18 +396,65 @@ pub fn parse(
             '∞' => Token::Infinity,
             'ε' => Token::Epsilon,
 
+            '‿' => {
+                // Consume previous Value token
+                let prev = tokens.clone();
+                let otherwise = (Token::InvalidState.clone(), loc.clone());
+                let prev = &prev.last().unwrap_or(&otherwise);
+
+                let value = match &prev.0 {
+                    Token::Integer(n) => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        Token::Integer(n.clone())
+                    }
+                    Token::Rational(r) => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        Token::Rational(r.clone())
+                    }
+                    Token::Complex(c) => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        Token::Complex(c.clone())
+                    }
+                    Token::Spacing | Token::InvalidState | _ => {
+                        Err((SyntaxError::InvalidSymbol('‿'), loc.clone(), tokens.clone()))?
+                    }
+                };
+                let value_loc = prev.1.clone();
+
+                // Check second to last token for an unfinished list
+                let prev = tokens.clone();
+                let otherwise = (Token::InvalidState.clone(), loc.clone());
+                let prev = &prev
+                    .get(prev.len().overflowing_sub(2).0)
+                    .unwrap_or(&otherwise);
+
+                match &prev.0 {
+                    Token::_UnfinishedList(tokens) => {
+                        let mut tokens = tokens.clone();
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        Token::_UnfinishedList(tokens)
+                    }
+                    Token::Spacing | Token::InvalidState | _ => {
+                        Token::_UnfinishedList(vec![(value, value_loc)])
+                    }
+                }
+            }
+
             '.' => Token::Dup,
             ',' => Token::Pop,
             '↔' => Token::Flip,
-
-            '+' => Token::Add,
-            '-' => Token::Subtract,
-            '×' => Token::Multiply,
-            '÷' => Token::Divide,
-            'ⁿ' => Token::Power,
-            '√' => Token::Root,
-            '!' => Token::Factorial,
-            '◿' => Token::Modulo,
 
             '⁻' => {
                 if let Some('¹') = chars.peek() {
@@ -398,7 +462,8 @@ pub fn parse(
                     loc.end += c.unwrap().len_utf8();
                     loc.column += 1;
 
-                    Token::Inverse
+                    // Temporary token value, post-processing will replace it
+                    Token::Inverse(Box::new(Token::InvalidState), loc.clone())
                 } else {
                     Token::Minus
                 }
@@ -441,7 +506,8 @@ pub fn parse(
                 loc.clone(),
                 tokens.clone(),
             ))?,
-            _ => Err((SyntaxError::InvalidSymbol(c), loc.clone(), tokens.clone()))?,
+
+            c => Token::FunctionCall(c),
         };
 
         tokens.push((token, loc.clone()));
@@ -451,11 +517,65 @@ pub fn parse(
         loc.column += 1;
     }
 
-    Ok(tokens
+    /* Post-processing */
+
+    // Try to merge unfinished lists with the following value
+    let mut tokens = tokens;
+    let mut i = 0;
+    while i < tokens.len() {
+        if let Token::_UnfinishedList(mut unfinished) = tokens[i].0.clone() {
+            let j = i + 1;
+            while j < tokens.len() {
+                // If there's spacing, parsing error
+                if let Token::Spacing = tokens[j].0 {
+                    Err((
+                        SyntaxError::InvalidSymbol(' '),
+                        tokens[j].1.clone(),
+                        tokens.clone(),
+                    ))?;
+                }
+                if let Token::_UnfinishedList(mut unfinished2) = tokens[j].0.clone() {
+                    unfinished.append(&mut unfinished2);
+                    tokens.remove(j);
+                    continue;
+                }
+                unfinished.push(tokens[j].clone());
+                tokens.remove(j);
+                break;
+            }
+            tokens[i] = (
+                Token::List(unfinished.into_iter().map(|v| v.0).collect()),
+                tokens[i].1.clone(),
+            );
+        }
+        i += 1;
+    }
+
+    tokens = tokens
         .into_iter()
         .filter(|(token, _)| match token {
             Token::Spacing => false,
             _ => true,
         })
-        .collect())
+        .collect();
+
+    // Have inverse consume the next token
+    let mut tokens = tokens;
+    let mut i = 0;
+    while i < tokens.len() {
+        if let Token::Inverse(_, loc) = tokens[i].0.clone() {
+            let j = i + 1;
+            if j >= tokens.len() {
+                Err((SyntaxError::LonelyInverse, loc.clone(), tokens.clone()))?;
+            }
+            tokens[i] = (
+                Token::Inverse(Box::new(tokens[j].0.clone()), loc.clone()),
+                loc,
+            );
+            tokens.remove(j);
+        }
+        i += 1;
+    }
+
+    Ok(tokens)
 }

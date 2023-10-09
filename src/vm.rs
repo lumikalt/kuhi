@@ -38,6 +38,42 @@ impl Env {
                 Token::Rational(r) => stack.push(Value::Rational(r.clone())),
                 Token::Complex(c) => stack.push(Value::Complex(c.clone())),
 
+                Token::List(vals) => stack.push(Value::List(
+                    vals.into_iter()
+                        .map(|tok| tok.clone().into())
+                        .collect::<Vec<_>>(),
+                )),
+                Token::_UnfinishedList(_) => unreachable!("Unfinished list"),
+
+                Token::Scope(op) => {
+                    let top = if let Some(value) = stack.pop() {
+                        value
+                    } else {
+                        return Err((
+                            RuntimeError::InvalidPop {
+                                len: stack.len(),
+                                arity: 1,
+                            },
+                            loc.clone(),
+                        ));
+                    };
+
+                    match top {
+                        Value::List(vals) => {
+                            let mut inner_env = Env::new(op.to_vec());
+                            inner_env.stack = vals;
+                            inner_env.run()?;
+
+                            match inner_env.stack.len() {
+                                0 => continue,
+                                1 => stack.push(inner_env.stack.pop().unwrap()),
+                                _ => stack.push(Value::List(inner_env.stack)),
+                            }
+                        }
+                        _ => todo!("Implement scope for non-list values"),
+                    }
+                }
+
                 Token::Infinity => stack.push(Value::Infinity(1)),
                 Token::Epsilon => stack.push(Value::Epsilon(1)),
                 Token::Pi(r) => stack.push(Value::Pi(r.clone(), 1)),
@@ -48,17 +84,30 @@ impl Env {
                         stack.push(value.clone());
                         stack.push(value);
                     } else {
-                        return Err((RuntimeError::InvalidPop { len: stack.len(), arity: 1 }, loc.clone()));
+                        return Err((
+                            RuntimeError::InvalidPop {
+                                len: stack.len(),
+                                arity: 1,
+                            },
+                            loc.clone(),
+                        ));
                     }
                 }
                 Token::Pop => {
                     if let Some(_) = stack.pop() {
                         // Do nothing
                     } else {
-                        return Err((RuntimeError::InvalidPop { len: stack.len(), arity: 1 }, loc.clone()));
+                        return Err((
+                            RuntimeError::InvalidPop {
+                                len: stack.len(),
+                                arity: 1,
+                            },
+                            loc.clone(),
+                        ));
                     }
                 }
-                Token::Flip => { match unsafe { BUILTINS.get(&'.').unwrap_unchecked() }.call(stack.clone()) {
+                Token::Flip => {
+                    match unsafe { BUILTINS.get(&'↔').unwrap_unchecked() }.call(stack.clone()) {
                         Err(err) => return Err((err, loc.clone())),
                         Ok(stack) => {
                             self.stack = stack;
@@ -69,84 +118,47 @@ impl Env {
                     if let Some(value) = stack.pop() {
                         stack.push(-value);
                     } else {
-                        return Err((RuntimeError::InvalidPop { len: stack.len(), arity: 1 }, loc.clone()));
+                        return Err((
+                            RuntimeError::InvalidPop {
+                                len: stack.len(),
+                                arity: 1,
+                            },
+                            loc.clone(),
+                        ));
                     }
                 }
 
-                Token::Add => {
-                    match unsafe { BUILTINS.get(&'+').unwrap_unchecked() }.call(stack.clone()) {
+                Token::FunctionCall(c) => match BUILTINS.get(&c) {
+                    Some(builtin) => match builtin.call(stack.clone()) {
                         Err(err) => return Err((err, loc.clone())),
                         Ok(stack) => {
                             self.stack = stack;
                         }
-                    }
-                }
-                Token::Subtract => {
-                    match unsafe { BUILTINS.get(&'-').unwrap_unchecked() }.call(stack.clone()) {
-                        Err(err) => return Err((err, loc.clone())),
-                        Ok(stack) => {
-                            self.stack = stack;
-                        }
-                    }
-                }
-                Token::Multiply => {
-                    match unsafe { BUILTINS.get(&'×').unwrap_unchecked() }.call(stack.clone()) {
-                        Err(err) => return Err((err, loc.clone())),
-                        Ok(stack) => {
-                            self.stack = stack;
-                        }
-                    }
-                }
-                Token::Divide => {
-                    match unsafe { BUILTINS.get(&'÷').unwrap_unchecked() }.call(stack.clone()) {
-                        Err(err) => return Err((err, loc.clone())),
-                        Ok(stack) => {
-                            self.stack = stack;
-                        }
-                    }
-                }
-                Token::Power => {
-                    match unsafe { BUILTINS.get(&'ⁿ').unwrap_unchecked() }.call(stack.clone()) {
-                        Err(err) => return Err((err, loc.clone())),
-                        Ok(stack) => {
-                            self.stack = stack;
-                        }
-                    }
-                }
-                Token::Root => {
-                    match unsafe { BUILTINS.get(&'√').unwrap_unchecked() }.call(stack.clone()) {
-                        Err(err) => return Err((err, loc.clone())),
-                        Ok(stack) => {
-                            self.stack = stack;
-                        }
-                    }
-                }
-                Token::Factorial => {
-                    match unsafe { BUILTINS.get(&'!').unwrap_unchecked() }.call(stack.clone()) {
-                        Err(err) => return Err((err, loc.clone())),
-                        Ok(stack) => {
-                            self.stack = stack;
-                        }
-                    }
-                }
-                Token::Modulo => {
-                    match unsafe { BUILTINS.get(&'◿').unwrap_unchecked() }.call(stack.clone()) {
-                        Err(err) => return Err((err, loc.clone())),
-                        Ok(stack) => {
-                            self.stack = stack;
-                        }
-                    }
-                }
+                    },
+                    None => return Err((RuntimeError::FunctionNotFound(c.clone()), loc.clone())),
+                },
 
                 Token::Function(_f) => {
                     todo!("Implement function application")
                 }
-                Token::Inverse => todo!("Inverse"),
-
+                Token::Inverse(tok, loc) => match tok.as_ref() {
+                    Token::FunctionCall(c) => match BUILTINS.get(&c) {
+                        Some(builtin) => match builtin.call_inverse(stack.clone()) {
+                            Err(err) => return Err((err, loc.clone())),
+                            Ok(stack) => {
+                                self.stack = stack;
+                            }
+                        },
+                        None => {
+                            return Err((RuntimeError::FunctionNotFound(c.clone()), loc.clone()))
+                        }
+                    },
+                    _ => Err((RuntimeError::InverseOfNonFunction, dbg!(loc.clone())))?,
+                },
                 Token::InvalidState => unreachable!(),
             }
 
-            if let Value::InvalidState(err) = self.stack.last().unwrap() {
+            if let Value::InvalidState(err) = self.stack.last().unwrap_or(&Value::Epsilon(0)) {
                 return Err((err.clone(), loc.clone()));
             }
         }

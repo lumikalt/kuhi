@@ -22,7 +22,11 @@ pub enum Value {
     Complex(Complex),
     Float(Float),
 
+    String(String),
+
     List(Vec<Value>),
+
+    Scope(Stack),
     Function(fn(&mut Stack) -> RuntimeResult),
 
     // Math specials
@@ -36,28 +40,32 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn types(&self) -> Vec<&str> {
+    pub fn types(&self) -> Vec<String> {
         match self {
-            Value::Integer(_) => vec!["Number", "Integer"],
-            Value::Rational(_) => vec!["Number", "Rational"],
-            Value::Complex(_) => vec!["Number", "Complex"],
-            Value::Float(_) => vec!["Number", "Float"],
+            Value::Integer(_) => vec!["Number".to_string(), "Integer".to_string()],
+            Value::Rational(_) => vec!["Number".to_string(), "Rational".to_string()],
+            Value::Complex(_) => vec!["Number".to_string(), "Complex".to_string()],
+            Value::Float(_) => vec!["Number".to_string(), "Float".to_string()],
 
-            Value::List(_) => vec!["List"],
-            Value::Function(_) => vec!["Function"],
+            Value::String(_) => vec!["List".to_string(), "String".to_string()],
 
-            Value::Infinity(_) => vec!["Number", "Infinity"],
-            Value::Undefined => vec!["Number", "Undefined"],
-            Value::Pi(_, _) => vec!["Number", "Pi"],
-            Value::E(_, _) => vec!["Number", "E"],
-            Value::Epsilon(_) => vec!["Number", "Epsilon"],
+            Value::List(_) => vec!["List".to_string(), self.validate_list().unwrap()],
 
-            Value::InvalidState(_) => unreachable!("InvalidState should never be used"),
+            Value::Scope(_) => vec![],
+            Value::Function(_) => vec!["Function".to_string()],
+
+            Value::Infinity(_) => vec!["Number".to_string(), "Infinity".to_string()],
+            Value::Undefined => vec!["Number".to_string().to_string(), "Undefined".to_string()],
+            Value::Pi(_, _) => vec!["Number".to_string(), "Float".to_string(), "Pi".to_string()],
+            Value::E(_, _) => vec!["Number".to_string(), "Float".to_string(), "E".to_string()],
+            Value::Epsilon(_) => vec!["Number".to_string(), "Epsilon".to_string()],
+
+            Value::InvalidState(_) => unreachable!(),
         }
     }
 
     pub fn reciprocal(&self) -> Self {
-        if !self.types().contains(&"Number") {
+        if !self.types().contains(&"Number".to_string()) {
             return Value::InvalidState(RuntimeError::TypeMissmatch {
                 expected: "Number".to_string(),
                 got: format!("{}", self.types().join(", ")),
@@ -93,15 +101,26 @@ impl Value {
     }
 
     pub fn pow(&self, rhs: &Self) -> Self {
-        if !self.types().contains(&"Number") || !rhs.types().contains(&"Number") {
-            return Value::InvalidState(RuntimeError::TypeMissmatch {
-                expected: "Number".to_string(),
-                got: format!("{} and {}", self.types().join(", "), rhs.types().join(", ")),
-            });
-        }
-
         match (self, rhs) {
+            (Value::List(a), x) if x.types().contains(&"Number".to_string()) => {
+                let mut res = vec![];
+                for val in a {
+                    res.push(val.pow(rhs));
+                }
+                Value::List(res)
+            }
             (Value::Integer(n), Value::Integer(m)) => {
+                if m.clone().signum() == -1 {
+                    return Value::Rational(Rational::from((
+                        1,
+                        n.clone().pow(match Integer::from(m.clone() * -1).to_u32() {
+                            Some(m) => m,
+                            None => {
+                                return Value::InvalidState(RuntimeError::ExponentTooBig(m.clone()))
+                            }
+                        }),
+                    )));
+                }
                 if let Some(m) = m.to_u32() {
                     Value::Integer(n.clone().pow(m))
                 } else {
@@ -120,13 +139,18 @@ impl Value {
                 }
             }
             _ => {
-                todo!()
+                return Value::InvalidState(RuntimeError::TypeMissmatch {
+                    expected: "Number".to_string(),
+                    got: format!("{} and {}", self.types().join(", "), rhs.types().join(", ")),
+                });
             }
         }
     }
 
     pub fn root(&self, rhs: &Self) -> Self {
-        if !self.types().contains(&"Number") || !rhs.types().contains(&"Number") {
+        if !self.types().contains(&"Number".to_string())
+            || !rhs.types().contains(&"Number".to_string())
+        {
             return Value::InvalidState(RuntimeError::TypeMissmatch {
                 expected: "Number".to_string(),
                 got: format!("{} and {}", self.types().join(", "), rhs.types().join(", ")),
@@ -163,6 +187,65 @@ impl Value {
             }
         }
     }
+
+    fn stronger_number_type(a: String, b: String) -> String {
+        // Complex > Float > Rational > Integer
+        match (a.as_str(), b.as_str()) {
+            ("Complex", _) => "Complex".to_string(),
+            (_, "Complex") => "Complex".to_string(),
+
+            ("Float", _) => "Float".to_string(),
+            (_, "Float") => "Float".to_string(),
+
+            ("Rational", _) => "Rational".to_string(),
+            (_, "Rational") => "Rational".to_string(),
+
+            ("Integer", _) => "Integer".to_string(),
+            (_, "Integer") => "Integer".to_string(),
+
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn validate_list(&self) -> Result<String /* Type */, RuntimeError> {
+        use Value::*;
+
+        let mut inner_type = std::string::String::with_capacity(10);
+
+        if let Value::List(vals) = self {
+            vals.clone()
+                .into_iter()
+                .try_reduce(|acc, val| match (acc, val) {
+                    (List(a), List(b)) => {
+                        if a.len() != b.len() {
+                            return Err(RuntimeError::ListElementSizeMissmatch {
+                                first: a.len(),
+                                second: b.len(),
+                            });
+                        }
+
+                        for (a, b) in a.iter().zip(b.iter()) {
+                            let a_t = a.types();
+                            let b_t = b.types();
+
+                            if a_t.contains(&"Number".to_string())
+                                && b_t.contains(&"Number".to_string())
+                            {
+                                inner_type = Value::stronger_number_type(
+                                    a_t.last().unwrap().to_owned(),
+                                    b_t.last().unwrap().to_owned(),
+                                )
+                            }
+                        }
+
+                        Ok(List(a.to_vec()))
+                    }
+                    _ => todo!("Implement list validation for non-list values"),
+                })?;
+        }
+
+        Ok("Integer".to_string())
+    }
 }
 
 impl From<Token> for Value {
@@ -172,7 +255,8 @@ impl From<Token> for Value {
             Token::Rational(r) => Value::Rational(r),
             Token::Complex(c) => Value::Complex(c),
             Token::Pi(r) => Value::Pi(r, 1),
-            _ => {
+            otherwise => {
+                dbg!(otherwise);
                 todo!()
             }
         }
@@ -185,7 +269,9 @@ impl Add for Value {
     fn add(self, rhs: Self) -> Self::Output {
         use Value::*;
 
-        if !self.types().contains(&"Number") || !rhs.types().contains(&"Number") {
+        if !self.types().contains(&"Number".to_string())
+            || !rhs.types().contains(&"Number".to_string())
+        {
             return InvalidState(RuntimeError::TypeMissmatch {
                 expected: "Number".to_string(),
                 got: format!("{} and {}", self.types().join(", "), rhs.types().join(", ")),
@@ -395,13 +481,18 @@ impl Display for Value {
             ),
             Float(x) => write!(f, "{}", x.to_f64().to_string().replace('-', "⁻")),
 
-            List(l) => {
-                write!(f, "(")?;
-                for v in l {
-                    write!(f, "{} ", v)?;
-                }
-                write!(f, ")")
-            }
+            String(s) => write!(f, "{:?}", s),
+
+            List(vals) => write!(
+                f,
+                "[{}]",
+                vals.into_iter()
+                    .map(|val| val.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+
+            Scope(_) => write!(f, "<scope>"),
             Function(_) => write!(f, "<function>"),
 
             Infinity(sign) => {

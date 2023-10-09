@@ -1,3 +1,3 @@
 - Special parsing rules for e?
-- Allow negative sign in complex numbers' imaginary part
-- Properly handle the failure on unicode, currently only a hack.
+- Properly handle the bug with unicode on loc, currently only a hack.
+- Add tuples so the scope is more useful
