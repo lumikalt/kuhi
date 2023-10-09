@@ -1,3 +1,5 @@
+#![feature(iterator_try_reduce)]
+
 pub mod builtins;
 pub mod err;
 pub mod parser;
