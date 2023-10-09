@@ -8,6 +8,7 @@ pub enum SyntaxError {
     InvalidSymbol(char),
     /// true if `(`, false if `)`
     UnmatchedParenthesis(bool),
+    LonelyInverse,
 }
 
 impl Display for SyntaxError {
@@ -15,6 +16,7 @@ impl Display for SyntaxError {
         match self {
             SyntaxError::InvalidSymbol(_) => write!(f, "invalid symbol"),
             SyntaxError::UnmatchedParenthesis(_) => write!(f, "unmatched parenthesis"),
+            SyntaxError::LonelyInverse => write!(f, "lonely inverse"),
         }
     }
 }
@@ -29,12 +31,18 @@ impl SyntaxError {
                 "there is a missing {} parenthesis in the code",
                 if *open { "opening" } else { "closing" }
             ),
+            SyntaxError::LonelyInverse => "must have something to invert".to_owned(),
         }
     }
 }
 
 #[derive(Clone, Debug)]
 pub enum RuntimeError {
+    FunctionNotFound(char),
+
+    ListTypeMissmatch { first: String, second: String },
+    ListElementSizeMissmatch { first: usize, second: usize },
+
     InvalidPop { len: usize, arity: usize },
 
     InvalidFoldWith(usize),
@@ -48,11 +56,23 @@ pub enum RuntimeError {
     DivideByZero,
 
     NoInverse,
+    InverseOfNonFunction,
 }
 
 impl Display for RuntimeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            RuntimeError::FunctionNotFound(c) => write!(f, "function `{}` not found", c),
+            RuntimeError::ListTypeMissmatch { first, second } => write!(
+                f,
+                "list has an element of type `{}` followed by one of type `{}`",
+                first, second
+            ),
+            RuntimeError::ListElementSizeMissmatch { first, second } => write!(
+                f,
+                "list has an element of size `{}` followed by one of size `{}`",
+                first, second
+            ),
             RuntimeError::InvalidPop { len, arity } => write!(
                 f,
                 "attempt to pop {} times from a stack of size {}",
@@ -74,6 +94,7 @@ impl Display for RuntimeError {
             RuntimeError::ZerothRoot => write!(f, "cannot take the 0th root"),
             RuntimeError::DivideByZero => write!(f, "cannot divide by zero"),
             RuntimeError::NoInverse => write!(f, "function is not inversible"),
+            RuntimeError::InverseOfNonFunction => write!(f, "cannot invert a non-function"),
         }
     }
 }
@@ -81,24 +102,29 @@ impl Display for RuntimeError {
 impl RuntimeError {
     pub fn note(&self) -> String {
         match self {
-            RuntimeError::InvalidPop { len: _, arity: _ } => {
-                format!(
-                    "ensure you are using the correct function or add more values to the stack"
-                )
+            RuntimeError::FunctionNotFound(_) => format!("check the docs for a list of functions"),
+            RuntimeError::ListTypeMissmatch { .. } => {
+                format!("ensure the list has elements of the same type")
+            }
+            RuntimeError::ListElementSizeMissmatch { .. } => {
+                format!("ensure the list has elements of the same size")
+            }
+            RuntimeError::InvalidPop { .. } => {
+                format!("ensure you are using the correct function or add more values to the stack")
             }
             RuntimeError::InvalidFoldWith(_) => format!("can only fold using binary operations"),
             RuntimeError::InvalidMapWith(_) => format!("can only map using unary operations"),
             RuntimeError::InvalidFilterWith(_) => format!("can only filter using unary operations"),
-            RuntimeError::TypeMissmatch {
-                expected: _,
-                got: _,
-            } => format!(
+            RuntimeError::TypeMissmatch { .. } => format!(
                 "ensure the function you're using works for the type of values on the stack"
             ),
             RuntimeError::ExponentTooBig(_) => format!("max is {} (u32::MAX)", u32::MAX),
             RuntimeError::ZerothRoot => format!("try filtering the 0s on the stack"),
-            RuntimeError::DivideByZero => format!("try filtering the 0s on the stack\nuse ε to produce a small number instead of 0"),
+            RuntimeError::DivideByZero => format!(
+                "try filtering the 0s on the stack\nuse ε to produce a small number instead of 0"
+            ),
             RuntimeError::NoInverse => format!("rethink your logic"),
+            RuntimeError::InverseOfNonFunction => format!("ensure inverse comes after a function"),
         }
     }
 }
