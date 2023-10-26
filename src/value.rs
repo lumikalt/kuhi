@@ -49,7 +49,11 @@ impl Value {
 
             Value::String(_) => vec!["List".to_string(), "String".to_string()],
 
-            Value::List(_) => vec!["List".to_string(), self.validate_list().unwrap()],
+            Value::List(_) => {
+                let mut v = vec!["List".to_string()];
+                v.append(&mut self.validate_list().unwrap());
+                v
+            }
 
             Value::Scope(_) => vec![],
             Value::Function(_) => vec!["Function".to_string()],
@@ -68,7 +72,14 @@ impl Value {
         if !self.types().contains(&"Number".to_string()) {
             return Value::InvalidState(RuntimeError::TypeMissmatch {
                 expected: "Number".to_string(),
-                got: format!("{}", self.types().join(", ")),
+                got: format!(
+                    "{}",
+                    self.types()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<_>>()
+                        .join(" ⊂ ")
+                ),
             });
         }
         if self.is_zero() {
@@ -94,7 +105,7 @@ impl Value {
                         .into_iter()
                         .rev()
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join(" ⊂ ")
                 ),
             }),
         }
@@ -128,6 +139,19 @@ impl Value {
                 }
             }
             (Value::Rational(r), Value::Integer(n)) => {
+                if n.clone().signum() == -1 {
+                    return Value::Rational(
+                        Rational::from((1, 1))
+                            / r.clone().pow(match Integer::from(n.clone() * -1).to_u32() {
+                                Some(n) => n,
+                                None => {
+                                    return Value::InvalidState(RuntimeError::ExponentTooBig(
+                                        n.clone(),
+                                    ))
+                                }
+                            }),
+                    );
+                }
                 if let Some(n) = n.to_i32() {
                     Value::Rational(r.clone().pow(n))
                 } else {
@@ -138,10 +162,33 @@ impl Value {
                     }
                 }
             }
+            (Value::Complex(c), Value::Integer(n)) => {
+                if let Some(n) = n.to_i32() {
+                    Value::Complex(c.clone().pow(n))
+                } else {
+                    if let Some(n) = n.to_u32() {
+                        Value::Complex(c.clone().pow(n))
+                    } else {
+                        Value::InvalidState(RuntimeError::ExponentTooBig(n.clone()))
+                    }
+                }
+            }
             _ => {
                 return Value::InvalidState(RuntimeError::TypeMissmatch {
                     expected: "Number".to_string(),
-                    got: format!("{} and {}", self.types().join(", "), rhs.types().join(", ")),
+                    got: format!(
+                        "{}` and `{}",
+                        self.types()
+                            .into_iter()
+                            .rev()
+                            .collect::<Vec<_>>()
+                            .join(" ⊂ "),
+                        rhs.types()
+                            .into_iter()
+                            .rev()
+                            .collect::<Vec<_>>()
+                            .join(" ⊂ ")
+                    ),
                 });
             }
         }
@@ -153,12 +200,25 @@ impl Value {
         {
             return Value::InvalidState(RuntimeError::TypeMissmatch {
                 expected: "Number".to_string(),
-                got: format!("{} and {}", self.types().join(", "), rhs.types().join(", ")),
+                got: format!(
+                    "{}` and `{}",
+                    self.types()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<_>>()
+                        .join(" ⊂ "),
+                    rhs.types()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<_>>()
+                        .join(" ⊂ ")
+                ),
             });
         }
 
         match (self, rhs) {
             (Value::Integer(n), Value::Integer(m)) => {
+                println!("{} {}", n, m);
                 Value::Integer(n.clone().root(m.to_u32_wrapping()))
             }
             _ => {
@@ -188,9 +248,16 @@ impl Value {
         }
     }
 
-    fn stronger_number_type(a: String, b: String) -> String {
+    /// This function is used to determine the type of a list.
+    ///
+    /// # Safety
+    /// Both types must be Numeric, otherwise UB will occur.
+    /// Neither type can be Undefined, Infinity, or Epsilon, otherwise the logic just doesn't work.
+    /// If both types are in the previous list, then the result will be UB.
+    unsafe fn stronger_number_type(a: String, b: String) -> Vec<String> {
+        let mut v = vec!["Number".to_string()];
         // Complex > Float > Rational > Integer
-        match (a.as_str(), b.as_str()) {
+        v.push(match (a.as_str(), b.as_str()) {
             ("Complex", _) => "Complex".to_string(),
             (_, "Complex") => "Complex".to_string(),
 
@@ -204,15 +271,17 @@ impl Value {
             (_, "Integer") => "Integer".to_string(),
 
             _ => unreachable!(),
-        }
+        });
+
+        v
     }
 
-    pub fn validate_list(&self) -> Result<String /* Type */, RuntimeError> {
-        use Value::*;
-
-        let mut inner_type = std::string::String::with_capacity(10);
+    pub fn validate_list(&self) -> Result<Vec<String> /* Type */, RuntimeError> {
+        let mut inner_type: Vec<String> = Vec::with_capacity(2);
 
         if let Value::List(vals) = self {
+            use Value::*;
+
             vals.clone()
                 .into_iter()
                 .try_reduce(|acc, val| match (acc, val) {
@@ -231,7 +300,26 @@ impl Value {
                             if a_t.contains(&"Number".to_string())
                                 && b_t.contains(&"Number".to_string())
                             {
-                                inner_type = Value::stronger_number_type(
+                                inner_type = unsafe {
+                                    Value::stronger_number_type(
+                                        a_t.last().unwrap().to_owned(),
+                                        b_t.last().unwrap().to_owned(),
+                                    )
+                                }
+                            }
+                        }
+
+                        Ok(List(a.to_vec()))
+                    }
+                    (List(a), b) => {
+                        let a_t = a.last().unwrap().types();
+                        let b_t = b.types();
+
+                        if a_t.contains(&"Number".to_string())
+                            && b_t.contains(&"Number".to_string())
+                        {
+                            inner_type = unsafe {
+                                Value::stronger_number_type(
                                     a_t.last().unwrap().to_owned(),
                                     b_t.last().unwrap().to_owned(),
                                 )
@@ -240,11 +328,44 @@ impl Value {
 
                         Ok(List(a.to_vec()))
                     }
-                    _ => todo!("Implement list validation for non-list values"),
+                    (a, List(b)) => {
+                        let a_t = a.types();
+                        let b_t = b.last().unwrap().types();
+
+                        if a_t.contains(&"Number".to_string())
+                            && b_t.contains(&"Number".to_string())
+                        {
+                            inner_type = unsafe {
+                                Value::stronger_number_type(
+                                    a_t.last().unwrap().to_owned(),
+                                    b_t.last().unwrap().to_owned(),
+                                )
+                            }
+                        }
+
+                        Ok(List(b.to_vec()))
+                    }
+                    (a, b) => {
+                        let a_t = a.types();
+                        let b_t = b.types();
+
+                        if a_t.contains(&"Number".to_string())
+                            && b_t.contains(&"Number".to_string())
+                        {
+                            inner_type = unsafe {
+                                Value::stronger_number_type(
+                                    a_t.last().unwrap().to_owned(),
+                                    b_t.last().unwrap().to_owned(),
+                                )
+                            }
+                        }
+
+                        Ok(List(vec![a, b]))
+                    }
                 })?;
         }
 
-        Ok("Integer".to_string())
+        Ok(inner_type)
     }
 }
 
@@ -255,6 +376,10 @@ impl From<Token> for Value {
             Token::Rational(r) => Value::Rational(r),
             Token::Complex(c) => Value::Complex(c),
             Token::Pi(r) => Value::Pi(r, 1),
+            Token::E(r, e) => Value::E(r, e),
+            Token::Infinity => Value::Infinity(1),
+            Token::Epsilon => Value::Epsilon(1),
+
             otherwise => {
                 dbg!(otherwise);
                 todo!()
@@ -274,7 +399,11 @@ impl Add for Value {
         {
             return InvalidState(RuntimeError::TypeMissmatch {
                 expected: "Number".to_string(),
-                got: format!("{} and {}", self.types().join(", "), rhs.types().join(", ")),
+                got: format!(
+                    "{}` and `{}",
+                    self.types().join(", "),
+                    rhs.types().join(", ")
+                ),
             });
         }
 
@@ -305,9 +434,9 @@ impl Add for Value {
             | (Infinity(a), Float(_))
             | (Float(_), Infinity(a)) => Infinity(a),
 
-            (Infinity(_), Complex(_)) | (Complex(_), Infinity(_)) => {
-                todo!("Implement Infinity + Complex (study complex analysis)")
-            }
+            // infinity represents the magnitude of a very large complex number
+            // so summation leaves the magnitude infinite
+            (Infinity(a), Complex(_)) | (Complex(_), Infinity(a)) => Infinity(a),
 
             (Epsilon(a), Epsilon(b)) => {
                 if a.signum() == b.signum() {
@@ -352,7 +481,37 @@ impl Add for Value {
             // (E(r, exp), Integer(n)) | (Integer(n), E(r, exp)) => Rational(n * r),
             // (E(r, exp), Rational(s)) | (Rational(s), E(r, exp)) => Rational(s * r),
             // (E(r, exp), Complex(c)) | (Complex(c), E(r, exp)) => Complex(c * r * E),
-            _ => {
+            (List(a), List(b)) => {
+                if a.len() != b.len() {
+                    return InvalidState(RuntimeError::ListElementSizeMissmatch {
+                        first: a.len(),
+                        second: b.len(),
+                    });
+                }
+
+                let mut res = vec![];
+                for (a, b) in a.iter().zip(b.iter()) {
+                    res.push(a.clone() + b.clone());
+                }
+                List(res)
+            }
+            (List(a), b) => {
+                let mut res = vec![];
+                for a in a {
+                    res.push(a.clone() + b.clone());
+                }
+                List(res)
+            }
+            (a, List(b)) => {
+                let mut res = vec![];
+                for b in b {
+                    res.push(a.clone() + b.clone());
+                }
+                List(res)
+            }
+
+            otherwise => {
+                dbg!(otherwise);
                 todo!()
             }
         }
@@ -375,6 +534,10 @@ impl Neg for Value {
             Epsilon(sign) => Epsilon(-sign),
             Pi(r, esign) => Pi(-r, esign),
             E(r, exp) => E(-r, exp),
+
+            Undefined => Undefined,
+
+            List(vals) => List(vals.into_iter().map(|val| -val).collect()),
 
             invalid => InvalidState(RuntimeError::TypeMissmatch {
                 expected: "Numeric".to_string(),
@@ -430,24 +593,41 @@ impl Mul for Value {
                     Infinity(a * x.signum().to_f32() as i8)
                 }
             }
-            (Infinity(_), Complex(_)) | (Complex(_), Infinity(_)) => {
-                todo!("Implement Infinity + Complex (study complex analysis)")
+            (Infinity(a), Complex(z)) | (Complex(z), Infinity(a)) => {
+                // Indeterminate iff magnitude of complex number is zero
+                if z.clone().norm().is_zero() {
+                    Undefined
+                } else {
+                    Infinity(
+                        a * (z.real().clone().signum() * z.imag().clone().signum())
+                            .to_u32_saturating()
+                            .unwrap() as i8,
+                    )
+                }
             }
 
             (Epsilon(a), Epsilon(b)) => Epsilon(a * b),
             (Infinity(_), Epsilon(_)) | (Epsilon(_), Infinity(_)) => Undefined,
 
-            (Epsilon(a), Integer(n)) | (Integer(n), Epsilon(a)) => Integer(n * a),
-            (Epsilon(a), Rational(r)) | (Rational(r), Epsilon(a)) => Rational(r * a),
-            (Epsilon(a), Float(x)) | (Float(x), Epsilon(a)) => Float(x * a),
-            (Epsilon(a), Complex(z)) | (Complex(z), Epsilon(a)) => Complex(z * a),
+            (Epsilon(a), Integer(n)) | (Integer(n), Epsilon(a)) => {
+                Epsilon(n.signum().to_i8_wrapping() * a)
+            }
+            (Epsilon(a), Rational(r)) | (Rational(r), Epsilon(a)) => {
+                Epsilon(r.signum().to_f32() as i8 * a)
+            }
+            (Epsilon(a), Float(x)) | (Float(x), Epsilon(a)) => {
+                Epsilon(x.signum().to_f32() as i8 * a as i8)
+            }
+            (Epsilon(a), Complex(z)) | (Complex(z), Epsilon(a)) => {
+                Epsilon(z.abs().real().clone().signum().to_f32() as i8 * a)
+            }
 
             (Undefined, _) | (_, Undefined) => Undefined,
 
             (Pi(r, esign), Integer(n)) | (Integer(n), Pi(r, esign)) => Pi(r.clone() * n, esign),
             (Pi(r, esign), Rational(s)) | (Rational(s), Pi(r, esign)) => Pi(r.clone() * s, esign),
             (Pi(r, esign), Complex(c)) | (Complex(c), Pi(r, esign)) => Complex(
-                (rug::Float::with_val(128, r.numer()) / rug::Float::with_val(128, r.denom()))
+                rug::Float::with_val(128, r)
                     * match esign {
                         1 => PI.clone(),
                         -1 => PI.clone().recip(),
@@ -459,7 +639,37 @@ impl Mul for Value {
             // (E(r, exp), Integer(n)) | (Integer(n), E(r, exp)) => Rational(n * r),
             // (E(r, exp), Rational(s)) | (Rational(s), E(r, exp)) => Rational(s * r),
             // (E(r, exp), Complex(c)) | (Complex(c), E(r, exp)) => Complex(c * r * E),
-            _ => {
+            (List(a), List(b)) => {
+                if a.len() != b.len() {
+                    return InvalidState(RuntimeError::ListElementSizeMissmatch {
+                        first: a.len(),
+                        second: b.len(),
+                    });
+                }
+
+                let mut res = vec![];
+                for (a, b) in a.iter().zip(b.iter()) {
+                    res.push(a.clone() * b.clone());
+                }
+                List(res)
+            }
+            (List(a), b) => {
+                let mut res = vec![];
+                for a in a {
+                    res.push(a.clone() * b.clone());
+                }
+                List(res)
+            }
+            (a, List(b)) => {
+                let mut res = vec![];
+                for b in b {
+                    res.push(a.clone() * b.clone());
+                }
+                List(res)
+            }
+
+            otherwise => {
+                dbg!(otherwise);
                 todo!()
             }
         }

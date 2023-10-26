@@ -70,7 +70,7 @@ impl Env {
                                 _ => stack.push(Value::List(inner_env.stack)),
                             }
                         }
-                        _ => todo!("Implement scope for non-list values"),
+                        otherwise => stack.push(otherwise),
                     }
                 }
 

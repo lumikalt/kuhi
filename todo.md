@@ -1,3 +1,4 @@
-- Special parsing rules for e?
+- Special parsing rules for e
+- Special parsing rule for rationals, like 1%3
 - Properly handle the bug with unicode on loc, currently only a hack.
 - Add tuples so the scope is more useful

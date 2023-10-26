@@ -9,42 +9,28 @@ impl Formatter {
     pub fn new(src: String) -> Self {
         let mut symbols = [
             ("_", "‿"),
-
             ("infinity", "∞"),
             ("epsilon", "ε"),
             ("pi", "π"),
             ("tau", "τ"),
             ("alpha", "α"),
             ("iota", "ι"),
-
-            (":", "↔"),
+            (":", "↕"),
+            ("flip", "↕"),
+            ("swap", "↔"),
             ("`", "⁻"),
-
             ("*", "×"),
             ("%", "÷"),
             ("pow", "ⁿ"),
+            ("log", "ₙ"),
             ("croot", "∛"),
             ("cbrt", "∛"),
             ("sqrt", "√"),
             ("root", "√"),
             ("sin", "◯"),
-
+            ("sinh", "ⓔ"),
+            ("sins", "Ⓞ"),
             ("inverse", "⁻¹"),
-
-            // ("sin", "sin"),
-            // ("cos", "cos"),
-            // ("tan", "tan"),
-            // ("asin", "asin"),
-            // ("acos", "acos"),
-            // ("atan", "atan"),
-            // ("sinh", "sinh"),
-            // ("cosh", "cosh"),
-            // ("tanh", "tanh"),
-            // ("asinh", "asinh"),
-            // ("acosh", "acosh"),
-            // ("atanh", "atanh"),
-            // ("log", "log"),
-            // ("ln", "ln"),
             // ("exp", "exp"),
             // ("abs", "abs"),
             // ("floor", "floor"),
@@ -70,11 +56,11 @@ impl Formatter {
             // ("polygamma_inv", "ψ⁻¹"),
             // ("digamma", "ψ"),
             // ("digamma_inv", "ψ⁻¹"),
-            // ("factorial", "!"),
+            ("factorial", "!"),
         ];
         symbols.sort_by(|fst, snd| match fst.0.len() {
-            x if x > snd.0.len() => std::cmp::Ordering::Greater,
-            x if x < snd.0.len() => std::cmp::Ordering::Less,
+            x if x > snd.0.len() => std::cmp::Ordering::Less,
+            x if x < snd.0.len() => std::cmp::Ordering::Greater,
             _ => std::cmp::Ordering::Equal,
         });
 

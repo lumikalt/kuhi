@@ -45,7 +45,6 @@ fn main() -> anyhow::Result<()> {
         input.push('\n');
         full_input.push_str(&input.clone());
 
-
         let file = SimpleFile::new("<repl>", full_input.clone());
 
         let tokens = match parse(&input, &mut loc) {

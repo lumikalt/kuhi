@@ -6,8 +6,10 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum SyntaxError {
     InvalidSymbol(char),
-    /// true if `(`, false if `)`
+    /// true if `[`, false if `]`
     UnmatchedParenthesis(bool),
+    /// true if `[`, false if `]`
+    UnmatchedSquareBracket(bool),
     LonelyInverse,
 }
 
@@ -16,6 +18,7 @@ impl Display for SyntaxError {
         match self {
             SyntaxError::InvalidSymbol(_) => write!(f, "invalid symbol"),
             SyntaxError::UnmatchedParenthesis(_) => write!(f, "unmatched parenthesis"),
+            SyntaxError::UnmatchedSquareBracket(_) => write!(f, "unmatched square bracket"),
             SyntaxError::LonelyInverse => write!(f, "lonely inverse"),
         }
     }
@@ -29,6 +32,10 @@ impl SyntaxError {
             }
             SyntaxError::UnmatchedParenthesis(open) => format!(
                 "there is a missing {} parenthesis in the code",
+                if *open { "opening" } else { "closing" }
+            ),
+            SyntaxError::UnmatchedSquareBracket(open) => format!(
+                "there is a missing {} square bracket in the code",
                 if *open { "opening" } else { "closing" }
             ),
             SyntaxError::LonelyInverse => "must have something to invert".to_owned(),
@@ -54,6 +61,8 @@ pub enum RuntimeError {
     ExponentTooBig(Integer),
     ZerothRoot,
     DivideByZero,
+
+    InvalidIotaValue,
 
     NoInverse,
     InverseOfNonFunction,
@@ -93,6 +102,7 @@ impl Display for RuntimeError {
             RuntimeError::ExponentTooBig(n) => write!(f, "exponent too big: {}", n),
             RuntimeError::ZerothRoot => write!(f, "cannot take the 0th root"),
             RuntimeError::DivideByZero => write!(f, "cannot divide by zero"),
+            RuntimeError::InvalidIotaValue => write!(f, "can only be called with positive, not too large integers"),
             RuntimeError::NoInverse => write!(f, "function is not inversible"),
             RuntimeError::InverseOfNonFunction => write!(f, "cannot invert a non-function"),
         }
@@ -123,6 +133,7 @@ impl RuntimeError {
             RuntimeError::DivideByZero => format!(
                 "try filtering the 0s on the stack\nuse ε to produce a small number instead of 0"
             ),
+            RuntimeError::InvalidIotaValue => format!("make the value positive and smaller than {} (u32::MAX)", u32::MAX),
             RuntimeError::NoInverse => format!("rethink your logic"),
             RuntimeError::InverseOfNonFunction => format!("ensure inverse comes after a function"),
         }

@@ -424,6 +424,20 @@ pub fn parse(
                         tokens.pop();
                         Token::Complex(c.clone())
                     }
+                    Token::Pi(r) => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        Token::Pi(r.clone())
+                    }
+                    Token::Infinity | Token::Epsilon => {
+                        // set start of loc to previous token's
+                        loc.start = prev.1.start;
+                        loc.column = prev.1.column;
+                        tokens.pop();
+                        prev.0.clone()
+                    }
                     Token::Spacing | Token::InvalidState | _ => {
                         Err((SyntaxError::InvalidSymbol('‿'), loc.clone(), tokens.clone()))?
                     }
@@ -469,6 +483,44 @@ pub fn parse(
                 }
             }
 
+            '[' => {
+                let mut depth = 1;
+                let mut sub = Vec::new();
+                while let Some(c) = chars.next() {
+                    loc.end += 1;
+                    loc.column += 1;
+
+                    match c {
+                        '[' => depth += 1,
+                        ']' => depth -= 1,
+                        '\n' => {
+                            loc.line += 1;
+                            loc.column = 1;
+                            continue;
+                        }
+                        _ => {}
+                    }
+                    if depth == 0 {
+                        break;
+                    }
+                    sub.push((Token::Spacing, loc.clone()));
+                }
+                if depth != 0 {
+                    loc.end = loc.start;
+                    Err((
+                        SyntaxError::UnmatchedSquareBracket(false),
+                        loc.clone(),
+                        tokens.clone(),
+                    ))?;
+                }
+                Token::_UnfinishedList(sub)
+            }
+            ']' => Err((
+                SyntaxError::UnmatchedSquareBracket(true),
+                loc.clone(),
+                tokens.clone(),
+            ))?,
+
             '(' => {
                 let mut depth = 1;
                 let mut sub = String::new();
@@ -502,7 +554,7 @@ pub fn parse(
                 Token::Function(parse(sub.as_str(), loc)?)
             }
             ')' => Err((
-                SyntaxError::UnmatchedParenthesis(false),
+                SyntaxError::UnmatchedParenthesis(true),
                 loc.clone(),
                 tokens.clone(),
             ))?,
@@ -520,7 +572,6 @@ pub fn parse(
     /* Post-processing */
 
     // Try to merge unfinished lists with the following value
-    let mut tokens = tokens;
     let mut i = 0;
     while i < tokens.len() {
         if let Token::_UnfinishedList(mut unfinished) = tokens[i].0.clone() {
@@ -560,14 +611,20 @@ pub fn parse(
         .collect();
 
     // Have inverse consume the next token
-    let mut tokens = tokens;
     let mut i = 0;
     while i < tokens.len() {
         if let Token::Inverse(_, loc) = tokens[i].0.clone() {
+            let mut loc = loc.clone();
+            // Size of the ⁻
+            loc.end += 2;
+
             let j = i + 1;
             if j >= tokens.len() {
                 Err((SyntaxError::LonelyInverse, loc.clone(), tokens.clone()))?;
             }
+
+            loc = tokens[j].1.clone();
+
             tokens[i] = (
                 Token::Inverse(Box::new(tokens[j].0.clone()), loc.clone()),
                 loc,
